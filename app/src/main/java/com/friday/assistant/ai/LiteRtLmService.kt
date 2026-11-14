@@ -8,10 +8,13 @@ import com.google.ai.edge.litertlm.Conversation
 import com.google.ai.edge.litertlm.ConversationConfig
 import com.google.ai.edge.litertlm.Engine
 import com.google.ai.edge.litertlm.EngineConfig
+import com.google.ai.edge.litertlm.Message
+import com.google.ai.edge.litertlm.MessageCallback
 import com.google.ai.edge.litertlm.SamplerConfig
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -54,24 +57,56 @@ class LiteRtLmService(private val appContext: Context) {
         }
     }
 
-    fun generateReply(prompt: String): Flow<String> = flow {
+    fun generateReply(prompt: String): Flow<String> = callbackFlow {
         val eng = mutex.withLock { engine }
-            ?: error("No local model is loaded. Add a .litertlm model in Settings and load it.")
-        val conv = eng.createConversation(
-            ConversationConfig(
-                systemInstruction = Contents.of(
-                    "You are FRIDAY, a helpful on-device assistant. Answer the user's question directly, clearly, and completely in plain text. " +
-                        "Do not offer menus of how you can help unless asked. Stay on topic."
-                ),
-                samplerConfig = SamplerConfig(topK = 32, topP = 0.9, temperature = 0.2)
+            ?: run { close(IllegalStateException("No local model is loaded. Add a .litertlm model in Settings and load it.")); return@callbackFlow }
+        val conv = try {
+            eng.createConversation(
+                ConversationConfig(
+                    systemInstruction = Contents.of(
+                        "You are FRIDAY, a helpful on-device assistant. Answer the user's question directly, clearly, and completely in plain text. " +
+                            "Do not offer menus of how you can help unless asked. Stay on topic."
+                    ),
+                    samplerConfig = SamplerConfig(topK = 32, topP = 0.9, temperature = 0.2)
+                )
             )
-        )
+        } catch (e: Exception) {
+            close(e); return@callbackFlow
+        }
+
+        val buffer = StringBuilder()
+        var closed = false
         try {
-            // Use synchronous sendMessage to avoid LiteRT-LM async callback/channel crash on completion.
-            val result = conv.sendMessage(prompt)
-            val text = result.toString().trim()
-            emit(if (text.isNotEmpty()) text else "(empty response)")
-        } finally {
+            conv.sendMessageAsync(
+                prompt,
+                object : MessageCallback {
+                    override fun onMessage(message: Message) {
+                        val chunk = message.toString()
+                        if (chunk.isNotEmpty()) {
+                            buffer.append(chunk)
+                            trySend(buffer.toString())
+                        }
+                    }
+
+                    override fun onDone() {
+                        if (!closed) {
+                            val text = buffer.toString().trim()
+                            if (text.isEmpty()) trySend("(empty response)")
+                            close()
+                        }
+                    }
+
+                    override fun onError(t: Throwable) {
+                        close(t)
+                    }
+                }
+            )
+        } catch (e: Throwable) {
+            close(e)
+        }
+
+        awaitClose {
+            closed = true
             runCatching { conv.close() }
         }
     }.flowOn(Dispatchers.IO)
