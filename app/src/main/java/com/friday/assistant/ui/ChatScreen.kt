@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.displayCutoutPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
@@ -71,6 +72,8 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -169,6 +172,7 @@ private fun DrawerContent(
             .width(300.dp)
             .background(MaterialTheme.colorScheme.surface)
             .statusBarsPadding()
+            .displayCutoutPadding()
             .padding(horizontal = 12.dp, vertical = 16.dp)
     ) {
         Row(
@@ -324,7 +328,7 @@ private fun ChatScreen(
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            Column(modifier = Modifier.statusBarsPadding()) {
+            Column(modifier = Modifier.statusBarsPadding().displayCutoutPadding()) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -475,7 +479,7 @@ private fun MessageRow(message: ChatMessage, onCopy: () -> Unit, onEdit: (() -> 
                 Spacer(Modifier.height(4.dp))
             }
             val display = if (message.content.isBlank() && message.isStreaming) "Thinking..." else message.content
-            if (!isUser && !message.isError && display.isNotBlank()) {
+            if (!isUser && !message.isError && display.isNotBlank() && !message.isStreaming) {
                 Markdown(
                     content = display,
                     modifier = Modifier.fillMaxWidth()
@@ -618,7 +622,7 @@ private fun SettingsScreen(
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            Column(modifier = Modifier.statusBarsPadding()) {
+            Column(modifier = Modifier.statusBarsPadding().displayCutoutPadding()) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -676,7 +680,7 @@ private fun SettingsScreen(
                     )
                 }
                 item { SettingsTextField("Endpoint URL", state.apiConfig.baseUrl, "https://api.example.com/v1", onApiBaseUrlChange) }
-                item { SettingsTextField("API key (optional)", state.apiConfig.apiKey, "sk-...", onApiKeyChange) }
+                item { SettingsTextField("API key (optional)", state.apiConfig.apiKey, "sk-...", onApiKeyChange, masked = true) }
                 item { SettingsTextField("Model (optional)", state.apiConfig.model, "gpt-4o-mini / model-name", onApiModelChange) }
                 item {
                     val status = if (state.apiConfig.isConfigured) "Endpoint configured and will be used for chat." else "No endpoint configured. Add a URL to use Remote API."
@@ -834,7 +838,7 @@ private fun ModeChip(text: String, selected: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
-private fun SettingsTextField(label: String, value: String, placeholder: String, onChange: (String) -> Unit, mono: Boolean = false) {
+private fun SettingsTextField(label: String, value: String, placeholder: String, onChange: (String) -> Unit, mono: Boolean = false, masked: Boolean = false) {
     Text(label, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
     Spacer(Modifier.height(6.dp))
     Box(
@@ -854,9 +858,10 @@ private fun SettingsTextField(label: String, value: String, placeholder: String,
             textStyle = TextStyle(
                 color = MaterialTheme.colorScheme.onSurface,
                 fontSize = 13.sp,
-                fontFamily = if (mono) FontFamily.Monospace else FontFamily.Default
+                fontFamily = if (mono || masked) FontFamily.Monospace else FontFamily.Default
             ),
             cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+            visualTransformation = if (masked) PasswordVisualTransformation() else VisualTransformation.None,
             modifier = Modifier.fillMaxWidth()
         )
     }

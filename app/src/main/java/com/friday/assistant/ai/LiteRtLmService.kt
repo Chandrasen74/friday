@@ -25,12 +25,13 @@ import java.io.FileOutputStream
 class LiteRtLmService(private val appContext: Context) {
     private val mutex = Mutex()
     private var engine: Engine? = null
-    private var conversation: Conversation? = null
     private var loadedPath: String? = null
+    @Volatile private var activeGenerations: Int = 0
 
     suspend fun loadModel(modelPath: String, useGpu: Boolean = false): Result<ModelStatus> = mutex.withLock {
         withContext(Dispatchers.IO) {
             runCatching {
+                require(activeGenerations == 0) { "Cannot load model while generation is in progress. Stop generation first." }
                 closeInternal()
                 val file = File(modelPath)
                 require(file.exists() && file.isFile) { "Model file not found: $modelPath" }
@@ -60,6 +61,7 @@ class LiteRtLmService(private val appContext: Context) {
     fun generateReply(prompt: String, history: List<Pair<String, String>> = emptyList()): Flow<String> = callbackFlow {
         val eng = mutex.withLock { engine }
             ?: run { close(IllegalStateException("No local model is loaded. Add a .litertlm model in Settings and load it.")); return@callbackFlow }
+        activeGenerations++
         val conv = try {
             eng.createConversation(
                 ConversationConfig(
@@ -73,6 +75,7 @@ class LiteRtLmService(private val appContext: Context) {
                 )
             )
         } catch (e: Exception) {
+            activeGenerations = (activeGenerations - 1).coerceAtLeast(0)
             close(e); return@callbackFlow
         }
 
@@ -92,12 +95,19 @@ class LiteRtLmService(private val appContext: Context) {
         }
 
         val buffer = StringBuilder()
-        var closed = false
+        var finished = false
+        fun finishClose(err: Throwable? = null) {
+            if (finished) return
+            finished = true
+            activeGenerations = (activeGenerations - 1).coerceAtLeast(0)
+            if (err != null) close(err) else close()
+        }
         try {
             conv.sendMessageAsync(
                 fullPrompt,
                 object : MessageCallback {
                     override fun onMessage(message: Message) {
+                        if (finished) return
                         val chunk = message.toString()
                         if (chunk.isNotEmpty()) {
                             buffer.append(chunk)
@@ -106,39 +116,41 @@ class LiteRtLmService(private val appContext: Context) {
                     }
 
                     override fun onDone() {
-                        if (!closed) {
-                            val text = buffer.toString().trim()
-                            if (text.isEmpty()) trySend("(empty response)") else trySend(text)
-                            close()
-                        }
+                        if (finished) return
+                        val text = buffer.toString().trim()
+                        if (text.isEmpty()) trySend("(empty response)") else trySend(text)
+                        finishClose()
                     }
 
                     override fun onError(t: Throwable) {
-                        close(t)
+                        if (finished) return
+                        finishClose(t)
                     }
                 }
             )
         } catch (e: Throwable) {
-            close(e)
+            finishClose(e)
         }
 
         awaitClose {
-            closed = true
             runCatching { conv.close() }
+            if (!finished) {
+                finished = true
+                activeGenerations = (activeGenerations - 1).coerceAtLeast(0)
+            }
         }
     }.flowOn(Dispatchers.IO)
 
     suspend fun unload(): ModelStatus = mutex.withLock {
         withContext(Dispatchers.IO) {
+            if (activeGenerations > 0) error("Cannot unload while generation is in progress. Stop generation first.")
             closeInternal()
             ModelStatus(statusText = "No local model loaded")
         }
     }
 
     private fun closeInternal() {
-        runCatching { conversation?.close() }
         runCatching { engine?.close() }
-        conversation = null
         engine = null
         loadedPath = null
     }
@@ -189,8 +201,7 @@ class LiteRtLmService(private val appContext: Context) {
 
         fun modelDirs(context: Context): List<File> = listOfNotNull(
             File(context.filesDir, "models"),
-            context.getExternalFilesDir(null)?.let { File(it, "models") },
-            context.cacheDir
+            context.getExternalFilesDir(null)?.let { File(it, "models") }
         )
 
         fun listAvailableModels(context: Context): List<String> = modelDirs(context)
@@ -204,21 +215,38 @@ class LiteRtLmService(private val appContext: Context) {
             runCatching {
                 val u = url.trim()
                 require(u.startsWith("http://") || u.startsWith("https://")) { "Enter a valid http(s) URL" }
-                val name = u.substringAfterLast('/').substringBefore('?').ifBlank { "model.litertlm" }
-                val fileName = if (name.endsWith(".litertlm", true)) name else "$name.litertlm"
+                val rawName = u.substringAfterLast('/').substringBefore('?').ifBlank { "model.litertlm" }
+                val sanitized = rawName.replace(Regex("[^A-Za-z0-9._-]"), "_").take(80).ifBlank { "model.litertlm" }
+                val fileName = if (sanitized.endsWith(".litertlm", true)) sanitized else "$sanitized.litertlm"
                 val outDir = File(context.filesDir, "models").apply { mkdirs() }
                 val outFile = File(outDir, fileName)
                 val tmp = File(outDir, "$fileName.tmp")
                 val conn = (java.net.URL(u).openConnection() as java.net.HttpURLConnection).apply {
                     connectTimeout = 20000
                     readTimeout = 60000
+                    instanceFollowRedirects = true
                 }
                 try {
                     val code = conn.responseCode
                     if (code !in 200..299) error("Download failed: HTTP $code")
+                    val maxBytes = 5L * 1024L * 1024L * 1024L
+                    val len = conn.contentLengthLong
+                    if (len > maxBytes) error("Model too large (>${maxBytes / (1024 * 1024)} MB limit)")
+                    var total = 0L
                     conn.inputStream.use { input ->
-                        java.io.FileOutputStream(tmp).use { output -> input.copyTo(output) }
+                        java.io.FileOutputStream(tmp).use { output ->
+                            val buf = ByteArray(DEFAULT_BUFFER_SIZE)
+                            while (true) {
+                                val read = input.read(buf)
+                                if (read <= 0) break
+                                total += read
+                                if (total > maxBytes) error("Model too large (>${maxBytes / (1024 * 1024)} MB limit)")
+                                output.write(buf, 0, read)
+                            }
+                            output.flush()
+                        }
                     }
+                    if (total <= 0L) error("Downloaded file is empty")
                     if (outFile.exists()) outFile.delete()
                     if (!tmp.renameTo(outFile)) {
                         tmp.copyTo(outFile, overwrite = true)
@@ -226,6 +254,7 @@ class LiteRtLmService(private val appContext: Context) {
                     }
                     outFile.absolutePath
                 } finally {
+                    runCatching { tmp.delete() }
                     conn.disconnect()
                 }
             }
