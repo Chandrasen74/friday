@@ -9,6 +9,14 @@ Local-first Android assistant app built with Kotlin and Jetpack Compose.
 
 F.R.I.D.A.Y is an on-device-first personal assistant for Android inspired by Tony Stark's AI. It supports local inference with LiteRT-LM (bundled Qwen3-0.6B model) and configurable remote API inference, with chat sessions stored locally on the device.
 
+## Screenshots
+
+HTML demo preview: [`friday-demo.html`](friday-demo.html)
+
+| Chat | Sessions drawer | Conversation |
+| --- | --- | --- |
+| ![F.R.I.D.A.Y chat with fake conversation](screenshots/demo-chat.png) | ![F.R.I.D.A.Y sessions drawer](screenshots/demo-drawer.png) | ![F.R.I.D.A.Y coding help conversation](screenshots/demo-chat2.png) |
+
 ## Features
 
 - **Local inference (LiteRT-LM):** on-device text generation using `com.google.ai.edge.litertlm:litertlm-android` with a bundled/preloaded `litert-community/Qwen3-0.6B` (`Qwen3-0.6B_dynamic_wi4b32_afp32.litertlm`, CPU-oriented) model.
