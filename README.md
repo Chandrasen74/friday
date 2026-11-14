@@ -1,89 +1,81 @@
-# FRIDAY
+# F.R.I.D.A.Y
 
-**Upstream reference:** https://github.com/easy-developer1/jarvis-phone
+Local-first Android assistant app built with Kotlin and Jetpack Compose.
 
-![Screenshot of FRIDAY](screenshot.png)
+**Repository:** https://github.com/Chandrasen74/friday  
+**Current version:** v0.7.11 (`com.friday.assistant`, minSdk 26, target/compile SDK 35)
 
-## Overview
-FRIDAY is a local-first Android personal assistant project (Kotlin + Jetpack Compose), bootstrapped from the `jarvis-phone` concept and prepared as a clean, buildable baseline. It is named after Tony Stark's AI (F.R.I.D.A.Y.) and is intended to grow into a voice-capable on-device assistant.
+## Description
 
-- **Primary language:** Kotlin
-- **Languages detected:** Kotlin, XML, Gradle Kotlin DSL
-- **Stack/tech:** Android SDK, Jetpack Compose, Material 3, Gradle (AGP 8.7.2, Kotlin 2.0.21)
-- **Entry point:** `app/src/main/java/com/friday/assistant/MainActivity.kt`
-- **Current state:** baseline scaffold in place (app module, wrapper, CI workflow file, hygiene/docs). Core assistant features are planned, not yet implemented.
+F.R.I.D.A.Y is an on-device-first personal assistant for Android inspired by Tony Stark's AI. It supports local inference with LiteRT-LM (bundled Qwen3-0.6B model) and configurable remote API inference, with chat sessions stored locally on the device.
 
-## Language & stack details
-- **Android:** minSdk 26, target/compile SDK 35, applicationId `com.friday.assistant`
-- **UI:** Jetpack Compose (Material 3), edge-to-edge Compose activity shell
-- **Build:** Gradle Kotlin DSL, Gradle wrapper (8.9), Android Gradle Plugin 8.7.2, Kotlin 2.0.21 with Compose plugin
-- **CI (ready):** GitHub Actions workflow at `.github/workflows/build-apk.yml` to assemble and upload a debug APK (when pushed to a remote)
+## Features
 
-## Status and roadmap
+- **Local inference (LiteRT-LM):** on-device text generation using `com.google.ai.edge.litertlm:litertlm-android` with a bundled/preloaded `litert-community/Qwen3-0.6B` (`Qwen3-0.6B_dynamic_wi4b32_afp32.litertlm`, CPU-oriented) model.
+- **Remote API inference:** configurable endpoint/key/model with mode switching (Local / Remote API), flexible endpoint handling (OpenAI-compatible, Ollama-style, and custom paths), and endpoint testing.
+- **Chat experience:** streaming responses, markdown rendering, stop generation, regenerate, edit and resend, copy messages, and generation metrics (TTFT, total time, estimated tokens/sec, chars/sec, output stats).
+- **Sessions and storage:** local chat persistence (`filesDir`), create/select/delete sessions, rename sessions, clear current/all chats, and export/import chats as JSON.
+- **Model manager:** view model status/path, list/refresh available models, download model by URL, load/unload/switch local model.
+- **UI:** edge-to-edge/status and display-cutout aware layout, drawer navigation, settings and separate Chats & storage screens, splash/branding with F.R.I.D.A.Y identity.
 
-### Implemented in this baseline
-- [x] Buildable Android project structure (`:app` module, manifest, resources, Compose entry point)
-- [x] Gradle wrapper and root/app Gradle configuration
-- [x] Basic FRIDAY UI shell (welcome/status screen)
-- [x] Debug APK CI workflow definition (local file)
-- [x] Repository hygiene: proprietary license, improved `.gitignore`, `.gitattributes`, `.editorconfig`, contributing guide, issue/PR templates
+## Tech stack
 
-### Planned (not yet implemented)
-- [ ] System speech-to-text (push-to-talk and wake flow) and text-to-speech
-- [ ] Wake-word foreground service ("Hey FRIDAY") with visible notification
-- [ ] Local Room database for conversations, messages, memories, reminders
-- [ ] Long-term memory UI and memory-aware responses
-- [ ] OpenAI-compatible online AI client with encrypted API key storage
-- [ ] Local intent/fallback replies (time, reminders, app/web intents, basic commands)
-- [ ] Optional on-device generative model (MediaPipe/LiteRT Gemma task)
-- [ ] Optional integrations (Gmail/Contacts/Calendar) behind proper OAuth and least-privilege scopes
+- **Language:** Kotlin
+- **UI:** Jetpack Compose, Material 3
+- **Build:** Gradle Kotlin DSL, Android Gradle Plugin 8.7.2, Kotlin 2.2.0 (Compose plugin), Gradle Wrapper 8.9
+- **Android:** minSdk 26, targetSdk/compileSdk 35, Java/Kotlin JVM target 17
 
-> Note: The upstream README described these features as implemented. In this repository they are treated as roadmap items until code lands and is verified.
+## Packages and dependencies
 
-## How to install & run
+From `app/build.gradle.kts`:
+
+- `androidx.core:core-ktx:1.15.0`
+- `androidx.core:core-splashscreen:1.0.1`
+- `androidx.lifecycle:lifecycle-runtime-ktx:2.8.7`
+- `androidx.lifecycle:lifecycle-runtime-compose:2.8.7`
+- `androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7`
+- `androidx.activity:activity-compose:1.9.3`
+- `org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3` (forced/pinned to 1.7.3 via resolution strategy)
+- `androidx.compose:compose-bom:2024.10.01`
+  - `androidx.compose.ui:ui`
+  - `androidx.compose.ui:ui-graphics`
+  - `androidx.compose.ui:ui-tooling-preview`
+  - `androidx.compose.material3:material3`
+  - `androidx.compose.material:material-icons-extended`
+- `com.google.ai.edge.litertlm:litertlm-android:0.16.1` (on-device LiteRT-LM inference)
+- `com.mikepenz:multiplatform-markdown-renderer-m3:0.27.0` (markdown rendering)
+- Debug: `androidx.compose.ui:ui-tooling`, `androidx.compose.ui:ui-test-manifest`
+
+## Build and install
 
 ### Prerequisites
 - JDK 17
-- Android SDK (API 35 platform/build tools) and/or Android Studio
-- An Android device or emulator (Android 8.0 / API 26+)
+- Android SDK (API 35 platform/build tools)
+- Android device or emulator (Android 8.0 / API 26+)
 
-### Build locally
+### Build debug APK
 ```bash
-git clone <your-remote-url>/friday.git
-cd friday
+# Windows
+.\gradlew.bat assembleDebug
 
-# Build debug APK (Windows)
-gradlew.bat assembleDebug
-
-# Build debug APK (macOS/Linux)
+# macOS/Linux
 ./gradlew assembleDebug
-
-# APK output:
-# app/build/outputs/apk/debug/app-debug.apk
 ```
 
-You can also open the project in Android Studio and run the `app` configuration on a device/emulator.
+APK output: `app/build/outputs/apk/debug/app-debug.apk`
 
-### CI (when published to GitHub)
-- Workflow: `.github/workflows/build-apk.yml`
-- Trigger: manual (`workflow_dispatch`) or push to `main`
-- Artifact: `friday-debug-apk` (debug APK)
+### Install via adb
+```bash
+adb install -r app/build/outputs/apk/debug/app-debug.apk
+```
 
-## Repository structure (top-level)
-- `app/` - Android application module (Compose UI, manifest, resources)
-- `gradle/wrapper/` - Gradle wrapper (8.9)
-- `.github/` - CI workflow and issue/PR templates
-- `build.gradle.kts`, `settings.gradle.kts`, `gradle.properties` - Gradle build configuration
-- `LICENSE`, `CONTRIBUTING.md`, `.editorconfig`, `.gitattributes`, `.gitignore`
-- `README.md`, `screenshot.png`
+Prebuilt debug APKs are also published in [GitHub Releases](https://github.com/Chandrasen74/friday/releases).
 
-## Privacy and security notes (planned behavior)
-- No hardcoded API keys or secrets in source.
-- Intended design: local-first data, encrypted storage for remote API credentials, visible microphone/notification state, and least-privilege integrations.
-- Do not store passwords or highly sensitive secrets in assistant memory notes.
+## Notes
 
-## Status
-Baseline scaffold prepared locally with Chandrasen-style repository hygiene and honest documentation. Feature implementation, device testing, and real app screenshots are follow-on work.
+- Local inference runs on-device and is CPU-bound on supported hardware; response quality/speed depends on the selected local model (bundled model is lightweight).
+- Remote API mode can be used for higher-quality responses by configuring a compatible endpoint.
+- API credentials/config are stored in app preferences (API prefs excluded from Android backup rules); treat device security accordingly.
 
 ## License
 
@@ -91,4 +83,4 @@ All Rights Reserved
 
 Copyright (c) 2026 Chandrasen. All rights reserved.
 
-This repository and its contents are proprietary. No permission is granted to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of this software or its contents, in whole or in part, without prior written permission from the copyright holder. See [LICENSE](LICENSE).
+See [LICENSE](LICENSE).
