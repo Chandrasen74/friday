@@ -214,9 +214,14 @@ class ApiInferenceService(private val appContext: Context) {
                 .filter { it.startsWith("data:") }
                 .map { it.removePrefix("data:").trim() }
                 .filter { it.isNotBlank() && it != "[DONE]" }
-                .mapNotNull { part -> runCatching { parseResponse(part) }.getOrNull() }
+                .mapNotNull { part -> runCatching { parseResponse(part) }.getOrNull()?.takeIf { it.isNotBlank() } }
                 .toList()
-            if (parts.isNotEmpty()) return parts.last().ifBlank { parts.joinToString("") }
+            if (parts.isNotEmpty()) {
+                val joined = parts.joinToString("")
+                // if chunks look cumulative (each starts with previous), prefer the last/full one
+                val cumulative = parts.size > 1 && parts.zipWithNext().all { (a, b) -> b.startsWith(a) }
+                return if (cumulative) parts.last() else joined
+            }
         }
         return trimmed.take(1200)
     }

@@ -23,8 +23,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import java.util.concurrent.atomic.AtomicLong
 
 data class ChatUiState(
     val sessions: List<ChatSession> = emptyList(),
@@ -61,6 +63,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private val chatStore = ChatStore(application.applicationContext)
     private val memoryStore = MemoryStore(application.applicationContext)
     private var generationJob: Job? = null
+    private val generationId = AtomicLong(0L)
+    @Volatile private var activeGenerationId: Long = 0L
 
     private val _uiState = MutableStateFlow(ChatUiState())
     val uiState: StateFlow<ChatUiState> = _uiState.asStateFlow()
@@ -174,21 +178,26 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     fun saveApiConfig() { apiService.saveConfig(_uiState.value.apiConfig) }
 
-    private val persistMutex = kotlinx.coroutines.sync.Mutex()
+    private val chatPersistMutex = Mutex()
+    private var chatPersistJob: Job? = null
+    private val memoryPersistMutex = Mutex()
+    private var memoryPersistJob: Job? = null
 
     private fun persistChats() {
-        val snapshot = _uiState.value
-        viewModelScope.launch(Dispatchers.IO) {
-            persistMutex.withLock {
+        chatPersistJob?.cancel()
+        chatPersistJob = viewModelScope.launch(Dispatchers.IO) {
+            chatPersistMutex.withLock {
+                val snapshot = _uiState.value
                 chatStore.save(snapshot.sessions, snapshot.activeSessionId)
             }
         }
     }
 
     private fun persistMemory() {
-        val snapshot = _uiState.value
-        viewModelScope.launch(Dispatchers.IO) {
-            persistMutex.withLock {
+        memoryPersistJob?.cancel()
+        memoryPersistJob = viewModelScope.launch(Dispatchers.IO) {
+            memoryPersistMutex.withLock {
+                val snapshot = _uiState.value
                 memoryStore.save(com.friday.assistant.data.MemorySnapshot(snapshot.personaConfig, snapshot.memories))
             }
         }
@@ -377,30 +386,39 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun stopGeneration() {
-        if (!_uiState.value.isGenerating) return
+    private fun cancelActiveGeneration(markStopped: Boolean) {
+        val prevId = activeGenerationId
+        if (prevId != 0L) activeGenerationId = 0L
         generationJob?.cancel()
         generationJob = null
-        _uiState.update { state ->
-            state.copy(
-                isGenerating = false,
-                metrics = state.metrics.copy(finishedAtMs = System.currentTimeMillis()),
-                sessions = state.sessions.map { session ->
-                    session.copy(
-                        messages = session.messages.map { m ->
-                            if (m.isStreaming) m.copy(isStreaming = false, content = m.content.ifBlank { "(stopped)" }) else m
-                        },
-                        updatedAt = if (session.messages.any { it.isStreaming }) System.currentTimeMillis() else session.updatedAt
-                    )
-                }
-            )
+        if (markStopped) {
+            _uiState.update { state ->
+                val hadStreaming = state.sessions.any { s -> s.messages.any { it.isStreaming } }
+                state.copy(
+                    isGenerating = false,
+                    metrics = state.metrics.copy(finishedAtMs = System.currentTimeMillis()),
+                    sessions = state.sessions.map { session ->
+                        session.copy(
+                            messages = session.messages.map { m ->
+                                if (m.isStreaming) m.copy(isStreaming = false, content = m.content.ifBlank { "(stopped)" }) else m
+                            },
+                            updatedAt = if (hadStreaming) System.currentTimeMillis() else session.updatedAt
+                        )
+                    }
+                )
+            }
+            persistChats()
         }
-        persistChats()
+    }
+
+    fun stopGeneration() {
+        if (!_uiState.value.isGenerating) return
+        cancelActiveGeneration(markStopped = true)
     }
 
     fun regenerateLastResponse() {
-        if (_uiState.value.isGenerating) return
-        generationJob?.cancel()
+        if (_uiState.value.isGenerating || _uiState.value.isMemoryBusy) return
+        cancelActiveGeneration(markStopped = false)
         val session = _uiState.value.activeSession ?: return
         val lastAssistantIdx = session.messages.indexOfLast { it.role == ChatRole.ASSISTANT }
         val lastUserIdx = session.messages.indexOfLast { it.role == ChatRole.USER }
@@ -419,6 +437,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             )
         }
         startGeneration(session.id, prompt, trimmed, assistantId)
+        persistChats()
     }
 
     fun renameSession(sessionId: String, title: String) {
@@ -447,22 +466,38 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     fun clearAllChats() {
         if (_uiState.value.isGenerating) stopGeneration()
         _uiState.update { it.copy(sessions = emptyList(), activeSessionId = "", input = "", editingMessageId = null) }
+        chatPersistJob?.cancel()
         viewModelScope.launch(Dispatchers.IO) {
-            persistMutex.withLock {
+            chatPersistMutex.withLock {
                 chatStore.clear()
             }
         }
     }
 
-    fun exportChatsJson(): String = chatStore.exportJson()
+    fun exportChatsJson(): String {
+        val s = _uiState.value
+        return chatStore.exportJson(s.sessions, s.activeSessionId)
+    }
 
     fun importChatsJson(json: String): Boolean {
         val (sessions, activeId) = chatStore.parseImport(json)
         if (sessions.isEmpty()) return false
+        if (_uiState.value.isGenerating) stopGeneration()
         val fixed = sessions.map { s -> s.copy(messages = s.messages.map { it.copy(isStreaming = false) }) }
-        val resolvedActive = activeId ?: fixed.first().id
-        _uiState.update { it.copy(sessions = fixed, activeSessionId = resolvedActive, settingsOpen = false, chatsStorageOpen = false) }
-        viewModelScope.launch(Dispatchers.IO) { chatStore.save(fixed, resolvedActive) }
+        val resolvedActive = fixed.firstOrNull { it.id == activeId }?.id ?: fixed.first().id
+        _uiState.update {
+            it.copy(
+                sessions = fixed,
+                activeSessionId = resolvedActive,
+                settingsOpen = false,
+                chatsStorageOpen = false,
+                personaMemoryOpen = false,
+                editingMessageId = null,
+                input = "",
+                isGenerating = false
+            )
+        }
+        persistChats()
         return true
     }
 
@@ -478,8 +513,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     fun sendMessage() {
         val prompt = _uiState.value.input.trim()
-        if (prompt.isBlank() || _uiState.value.isGenerating) return
-        generationJob?.cancel()
+        if (prompt.isBlank() || _uiState.value.isGenerating || _uiState.value.isMemoryBusy) return
+        cancelActiveGeneration(markStopped = false)
 
         var stateNow = _uiState.value
         var session = stateNow.activeSession
@@ -488,11 +523,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 title = "New session",
                 messages = listOf(ChatMessage(role = ChatRole.ASSISTANT, content = "New session started. How can I help?"))
             )
-            _uiState.update { it.copy(sessions = listOf(created), activeSessionId = created.id) }
+            _uiState.update { state -> state.copy(sessions = listOf(created) + state.sessions, activeSessionId = created.id) }
             stateNow = _uiState.value
             session = stateNow.activeSession ?: return
         }
-        val sessionId = stateNow.activeSessionId.ifBlank { session.id }
+        val sessionId = session.id
         val editingId = stateNow.editingMessageId
         val assistantId = java.util.UUID.randomUUID().toString()
         val placeholder = ChatMessage(id = assistantId, role = ChatRole.ASSISTANT, content = "", isStreaming = true)
@@ -553,7 +588,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         if (s.personaConfig.useMemories) s.memories.map { it.content } else emptyList()
     }
 
+    private fun isActiveGeneration(id: Long): Boolean = activeGenerationId == id
+
     private fun startGeneration(sessionId: String, prompt: String, history: List<ChatMessage>, assistantId: String) {
+        val myId = generationId.incrementAndGet()
+        activeGenerationId = myId
         val start = System.currentTimeMillis()
         val modeLabel = if (_uiState.value.inferenceMode == InferenceMode.REMOTE_API) "remote" else "local"
         val modelName = if (_uiState.value.inferenceMode == InferenceMode.REMOTE_API) {
@@ -570,6 +609,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             val memories = activeMemories()
             var first = true
             var chunks = 0
+            var terminalHandled = false
             try {
                 when {
                     mode == InferenceMode.REMOTE_API -> {
@@ -581,7 +621,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                             val reply = apiService.generateReply(prompt, history, apiConfig, persona, memories)
                             val now = System.currentTimeMillis()
                             chunks = 1
-                            _uiState.update { it.copy(metrics = it.metrics.copy(firstTokenAtMs = it.metrics.firstTokenAtMs ?: now, finishedAtMs = now, outputChars = reply.length, chunkCount = chunks)) }
+                            if (isActiveGeneration(myId)) {
+                                _uiState.update { it.copy(metrics = it.metrics.copy(firstTokenAtMs = it.metrics.firstTokenAtMs ?: now, finishedAtMs = now, outputChars = reply.length, chunkCount = chunks)) }
+                            }
                             appendToAssistant(sessionId, assistantId, reply.ifBlank { "(empty response)" }, done = true, error = false)
                         }
                     }
@@ -595,41 +637,65 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                             }
                         var latest = ""
                         localService.generateReply(prompt, localHistory, persona, memories).collect { chunk ->
-                            latest = chunk // service emits accumulated text
+                            if (!isActiveGeneration(myId)) return@collect
+                            latest = chunk
                             chunks++
                             if (first && latest.isNotBlank()) {
                                 first = false
-                                _uiState.update { it.copy(metrics = it.metrics.copy(firstTokenAtMs = System.currentTimeMillis())) }
+                                _uiState.update { state ->
+                                    if (isActiveGeneration(myId)) state.copy(metrics = state.metrics.copy(firstTokenAtMs = System.currentTimeMillis())) else state
+                                }
                             }
-                            _uiState.update { it.copy(metrics = it.metrics.copy(outputChars = latest.length, chunkCount = chunks)) }
+                            _uiState.update { state ->
+                                if (isActiveGeneration(myId)) state.copy(metrics = state.metrics.copy(outputChars = latest.length, chunkCount = chunks)) else state
+                            }
                             appendToAssistant(sessionId, assistantId, latest, done = false, error = false)
                         }
-                        _uiState.update { it.copy(metrics = it.metrics.copy(finishedAtMs = System.currentTimeMillis(), outputChars = latest.length, chunkCount = chunks)) }
+                        if (isActiveGeneration(myId)) {
+                            _uiState.update { it.copy(metrics = it.metrics.copy(finishedAtMs = System.currentTimeMillis(), outputChars = latest.length, chunkCount = chunks)) }
+                        }
                         appendToAssistant(sessionId, assistantId, latest.ifBlank { "(empty response)" }, done = true, error = false)
                     }
                     else -> {
                         val fallback = buildFallbackReply(prompt, localStatus, apiConfig)
-                        _uiState.update { it.copy(metrics = it.metrics.copy(finishedAtMs = System.currentTimeMillis(), outputChars = fallback.length, chunkCount = 1)) }
+                        if (isActiveGeneration(myId)) {
+                            _uiState.update { it.copy(metrics = it.metrics.copy(finishedAtMs = System.currentTimeMillis(), outputChars = fallback.length, chunkCount = 1)) }
+                        }
                         appendToAssistant(sessionId, assistantId, fallback, done = true, error = false)
                     }
                 }
             } catch (e: kotlinx.coroutines.CancellationException) {
-                val current = _uiState.value.sessions.flatMap { it.messages }.firstOrNull { it.id == assistantId }
-                val stopped = current?.content?.ifBlank { "(stopped)" } ?: "(stopped)"
-                _uiState.update { it.copy(metrics = it.metrics.copy(finishedAtMs = System.currentTimeMillis(), outputChars = stopped.length, chunkCount = chunks), isGenerating = false) }
-                if (current?.isStreaming != false) {
-                    appendToAssistant(sessionId, assistantId, stopped, done = true, error = false)
-                } else {
-                    persistChats()
+                if (isActiveGeneration(myId)) {
+                    val current = _uiState.value.sessions.flatMap { it.messages }.firstOrNull { it.id == assistantId }
+                    val stopped = current?.content?.ifBlank { "(stopped)" } ?: "(stopped)"
+                    _uiState.update { state ->
+                        if (isActiveGeneration(myId)) state.copy(metrics = state.metrics.copy(finishedAtMs = System.currentTimeMillis(), outputChars = stopped.length, chunkCount = chunks), isGenerating = false) else state
+                    }
+                    if (current?.isStreaming != false) {
+                        appendToAssistant(sessionId, assistantId, stopped, done = true, error = false)
+                    } else {
+                        persistChats()
+                    }
+                    activeGenerationId = 0L
+                    generationJob = null
+                    terminalHandled = true
                 }
                 throw e
             } catch (e: Exception) {
-                val msg = "Error: ${e.message ?: "generation failed"}"
-                _uiState.update { it.copy(metrics = it.metrics.copy(finishedAtMs = System.currentTimeMillis(), outputChars = msg.length, chunkCount = chunks)) }
-                appendToAssistant(sessionId, assistantId, msg, done = true, error = true)
+                if (isActiveGeneration(myId)) {
+                    val msg = "Error: ${e.message ?: "generation failed"}"
+                    _uiState.update { state ->
+                        if (isActiveGeneration(myId)) state.copy(metrics = state.metrics.copy(finishedAtMs = System.currentTimeMillis(), outputChars = msg.length, chunkCount = chunks)) else state
+                    }
+                    appendToAssistant(sessionId, assistantId, msg, done = true, error = true)
+                }
             } finally {
-                _uiState.update { it.copy(isGenerating = false) }
-                persistChats()
+                if (!terminalHandled && isActiveGeneration(myId)) {
+                    activeGenerationId = 0L
+                    generationJob = null
+                    _uiState.update { it.copy(isGenerating = false) }
+                    persistChats()
+                }
             }
         }
     }
@@ -649,7 +715,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 }
             )
         }
-        if (done) persistChats()
+        // persistence on completion is handled by generation flow for the active generation; avoid duplicate/stale writes from old jobs
     }
 
     private fun buildFallbackReply(prompt: String, status: ModelStatus, api: ApiEndpointConfig): String {
@@ -673,8 +739,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     override fun onCleared() {
-        generationJob?.cancel()
-        viewModelScope.launch { localService.unload() }
+        cancelActiveGeneration(markStopped = false)
+        try {
+            kotlinx.coroutines.runBlocking { localService.unload() }
+        } catch (_: Exception) {
+        }
         super.onCleared()
     }
 }

@@ -21,17 +21,18 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
+import java.util.concurrent.atomic.AtomicInteger
 
 class LiteRtLmService(private val appContext: Context) {
     private val mutex = Mutex()
     private var engine: Engine? = null
     private var loadedPath: String? = null
-    @Volatile private var activeGenerations: Int = 0
+    private val activeGenerations = AtomicInteger(0)
 
     suspend fun loadModel(modelPath: String, useGpu: Boolean = false): Result<ModelStatus> = mutex.withLock {
         withContext(Dispatchers.IO) {
             runCatching {
-                require(activeGenerations == 0) { "Cannot load model while generation is in progress. Stop generation first." }
+                require(activeGenerations.get() == 0) { "Cannot load model while generation is in progress. Stop generation first." }
                 closeInternal()
                 val file = File(modelPath)
                 require(file.exists() && file.isFile) { "Model file not found: $modelPath" }
@@ -66,13 +67,25 @@ class LiteRtLmService(private val appContext: Context) {
     ): Flow<String> = callbackFlow {
         val eng = mutex.withLock { engine }
             ?: run { close(IllegalStateException("No local model is loaded. Add a .litertlm model in Settings and load it.")); return@callbackFlow }
-        activeGenerations++
+        activeGenerations.incrementAndGet()
+        var generationCounted = true
+        val completed = java.util.concurrent.atomic.AtomicBoolean(false)
+        fun complete(err: Throwable? = null) {
+            if (completed.compareAndSet(false, true)) {
+                if (generationCounted) {
+                    generationCounted = false
+                    activeGenerations.updateAndGet { current -> if (current > 0) current - 1 else 0 }
+                }
+                if (err != null) close(err) else close()
+            }
+        }
+
         val systemInstruction = buildString {
             append(systemPrompt.trim().ifBlank { com.friday.assistant.data.PersonaConfig.DEFAULT_PERSONA_PROMPT })
             val mem = memories.map { it.trim() }.filter { it.isNotBlank() }.take(20)
             if (mem.isNotEmpty()) {
                 append("\n\nPersistent memories about the user/context (use when relevant, do not invent):\n")
-                mem.forEachIndexed { i, m -> append("- ").append(m.take(300)).append('\n') }
+                mem.forEachIndexed { _, m -> append("- ").append(m.take(300)).append('\n') }
             }
         }
         val conv = try {
@@ -83,8 +96,8 @@ class LiteRtLmService(private val appContext: Context) {
                 )
             )
         } catch (e: Exception) {
-            activeGenerations = (activeGenerations - 1).coerceAtLeast(0)
-            close(e); return@callbackFlow
+            complete(e)
+            return@callbackFlow
         }
 
         val fullPrompt = buildString {
@@ -103,19 +116,12 @@ class LiteRtLmService(private val appContext: Context) {
         }
 
         val buffer = StringBuilder()
-        var finished = false
-        fun finishClose(err: Throwable? = null) {
-            if (finished) return
-            finished = true
-            activeGenerations = (activeGenerations - 1).coerceAtLeast(0)
-            if (err != null) close(err) else close()
-        }
         try {
             conv.sendMessageAsync(
                 fullPrompt,
                 object : MessageCallback {
                     override fun onMessage(message: Message) {
-                        if (finished) return
+                        if (completed.get()) return
                         val chunk = message.toString()
                         if (chunk.isNotEmpty()) {
                             buffer.append(chunk)
@@ -124,34 +130,35 @@ class LiteRtLmService(private val appContext: Context) {
                     }
 
                     override fun onDone() {
-                        if (finished) return
+                        if (completed.get()) return
                         val text = buffer.toString().trim()
                         if (text.isEmpty()) trySend("(empty response)") else trySend(text)
-                        finishClose()
+                        complete()
                     }
 
                     override fun onError(t: Throwable) {
-                        if (finished) return
-                        finishClose(t)
+                        if (completed.get()) return
+                        complete(t)
                     }
                 }
             )
         } catch (e: Throwable) {
-            finishClose(e)
+            complete(e)
         }
 
         awaitClose {
             runCatching { conv.close() }
-            if (!finished) {
-                finished = true
-                activeGenerations = (activeGenerations - 1).coerceAtLeast(0)
+            // if cancelled/closed before callback completion, ensure we release the generation slot
+            if (completed.compareAndSet(false, true) && generationCounted) {
+                generationCounted = false
+                activeGenerations.updateAndGet { current -> if (current > 0) current - 1 else 0 }
             }
         }
     }.flowOn(Dispatchers.IO)
 
     suspend fun unload(): ModelStatus = mutex.withLock {
         withContext(Dispatchers.IO) {
-            if (activeGenerations > 0) error("Cannot unload while generation is in progress. Stop generation first.")
+            if (activeGenerations.get() > 0) error("Cannot unload while generation is in progress. Stop generation first.")
             closeInternal()
             ModelStatus(statusText = "No local model loaded")
         }
