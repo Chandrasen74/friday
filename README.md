@@ -1,6 +1,5 @@
 # FRIDAY
 
-**Repository (local, prepared):** `C:\Users\Kanchan Verma\OneDrive\Desktop\Opencode\01-Projects\friday`  
 **Upstream reference:** https://github.com/easy-developer1/jarvis-phone
 
 ![Screenshot of FRIDAY](screenshot.png)
