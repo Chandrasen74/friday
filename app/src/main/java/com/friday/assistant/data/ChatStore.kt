@@ -50,6 +50,10 @@ class ChatStore(context: Context) {
         runCatching { if (file.exists()) file.readText() else toJson(emptyList(), "").toString() }.getOrDefault("")
     }
 
+    fun exportJson(sessions: List<ChatSession>, activeSessionId: String): String = runCatching {
+        toJson(sessions, activeSessionId).toString()
+    }.getOrDefault("{\"sessions\":[]}")
+
     fun parseImport(json: String): Pair<List<ChatSession>, String?> {
         return try {
             if (json.length > 5_000_000) return emptyList<ChatSession>() to null
@@ -106,24 +110,28 @@ class ChatStore(context: Context) {
             for (j in 0 until msgsArr.length()) {
                 val m = msgsArr.optJSONObject(j) ?: continue
                 val role = runCatching { ChatRole.valueOf(m.optString("role", "ASSISTANT")) }.getOrDefault(ChatRole.ASSISTANT)
+                val content = m.optString("content", "").trim()
+                if (content.isBlank()) continue
                 messages.add(
                     ChatMessage(
                         id = m.optString("id").ifBlank { java.util.UUID.randomUUID().toString() },
                         role = role,
-                        content = m.optString("content", ""),
+                        content = content.take(20000),
                         isStreaming = false,
                         isError = m.optBoolean("isError", false),
-                        timestamp = m.optLong("timestamp", System.currentTimeMillis())
+                        timestamp = m.optLong("timestamp", System.currentTimeMillis()).let { if (it <= 0L) System.currentTimeMillis() else it }
                     )
                 )
             }
+            val createdAt = s.optLong("createdAt", System.currentTimeMillis()).let { if (it <= 0L) System.currentTimeMillis() else it }
+            val updatedAt = s.optLong("updatedAt", createdAt).let { if (it <= 0L) createdAt else it }
             sessions.add(
                 ChatSession(
                     id = s.optString("id").ifBlank { java.util.UUID.randomUUID().toString() },
-                    title = s.optString("title", "New session").take(120),
+                    title = s.optString("title", "New session").trim().ifBlank { "New session" }.take(120),
                     messages = messages,
-                    createdAt = s.optLong("createdAt", System.currentTimeMillis()),
-                    updatedAt = s.optLong("updatedAt", System.currentTimeMillis())
+                    createdAt = createdAt,
+                    updatedAt = updatedAt
                 )
             )
         }
