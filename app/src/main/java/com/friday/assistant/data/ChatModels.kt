@@ -46,3 +46,19 @@ data class ApiEndpointConfig(
 ) {
     val isConfigured: Boolean get() = baseUrl.isNotBlank()
 }
+
+data class GenerationMetrics(
+    val startedAtMs: Long? = null,
+    val firstTokenAtMs: Long? = null,
+    val finishedAtMs: Long? = null,
+    val outputChars: Int = 0,
+    val modelName: String = ""
+) {
+    val ttftMs: Long? get() = if (startedAtMs != null && firstTokenAtMs != null) firstTokenAtMs - startedAtMs else null
+    val totalMs: Long? get() = if (startedAtMs != null && finishedAtMs != null) finishedAtMs - startedAtMs else null
+    val charsPerSec: Double? get() {
+        val t = totalMs ?: return null
+        if (t <= 0) return null
+        return outputChars * 1000.0 / t
+    }
+}

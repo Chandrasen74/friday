@@ -79,8 +79,10 @@ import com.friday.assistant.data.ApiEndpointConfig
 import com.friday.assistant.data.ChatMessage
 import com.friday.assistant.data.ChatRole
 import com.friday.assistant.data.ChatSession
+import com.friday.assistant.data.GenerationMetrics
 import com.friday.assistant.data.InferenceMode
 import com.friday.assistant.data.ModelStatus
+import com.mikepenz.markdown.m3.Markdown
 import kotlinx.coroutines.launch
 
 @Composable
@@ -130,7 +132,12 @@ fun FridayApp(viewModel: ChatViewModel) {
                 onClearCurrentChat = viewModel::clearCurrentSession,
                 onClearAllChats = viewModel::clearAllChats,
                 onExportChats = viewModel::exportChatsJson,
-                onRenameSession = viewModel::renameSession
+                onImportChats = viewModel::importChatsJson,
+                onRenameSession = viewModel::renameSession,
+                onModelDownloadUrlChange = viewModel::onModelDownloadUrlChange,
+                onDownloadModel = viewModel::downloadModel,
+                onTestApi = viewModel::testApiEndpoint,
+                onRefreshModels = viewModel::refreshAvailableModels
             )
         } else {
             ChatScreen(
@@ -141,7 +148,8 @@ fun FridayApp(viewModel: ChatViewModel) {
                 onInputChange = viewModel::onInputChange,
                 onSend = viewModel::sendMessage,
                 onStop = viewModel::stopGeneration,
-                onRegenerate = viewModel::regenerateLastResponse
+                onRegenerate = viewModel::regenerateLastResponse,
+                onEditMessage = viewModel::startEditMessage
             )
         }
     }
@@ -299,7 +307,8 @@ private fun ChatScreen(
     onInputChange: (String) -> Unit,
     onSend: () -> Unit,
     onStop: () -> Unit,
-    onRegenerate: () -> Unit
+    onRegenerate: () -> Unit,
+    onEditMessage: (String) -> Unit
 ) {
     val listState = rememberLazyListState()
     val messages = state.activeSession.messages
@@ -334,15 +343,18 @@ private fun ChatScreen(
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
+                        val mode = when {
+                            state.inferenceMode == InferenceMode.REMOTE_API && state.apiConfig.isConfigured -> "Remote API"
+                            state.inferenceMode == InferenceMode.REMOTE_API -> "Remote API (not configured)"
+                            state.modelStatus.isReady -> "LiteRT-LM local"
+                            else -> "Local fallback"
+                        }
                         Text(
-                            text = when {
-                                state.inferenceMode == InferenceMode.REMOTE_API && state.apiConfig.isConfigured -> "Remote API"
-                                state.inferenceMode == InferenceMode.REMOTE_API -> "Remote API (not configured)"
-                                state.modelStatus.isReady -> "LiteRT-LM local"
-                                else -> "Local fallback"
-                            },
+                            text = "$mode • ${formatMetrics(state.metrics, state.isGenerating)}",
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                     IconButton(onClick = onRegenerate, enabled = !state.isGenerating) {
@@ -383,7 +395,8 @@ private fun ChatScreen(
                     onCopy = {
                         clipboard.setText(AnnotatedString(msg.content))
                         Toast.makeText(context, "Copied", Toast.LENGTH_SHORT).show()
-                    }
+                    },
+                    onEdit = if (msg.role == ChatRole.USER && !state.isGenerating) { { onEditMessage(msg.id); Toast.makeText(context, "Editing message", Toast.LENGTH_SHORT).show() } } else null
                 )
             }
             item { Spacer(Modifier.height(12.dp)) }
@@ -393,7 +406,7 @@ private fun ChatScreen(
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun MessageRow(message: ChatMessage, onCopy: () -> Unit) {
+private fun MessageRow(message: ChatMessage, onCopy: () -> Unit, onEdit: (() -> Unit)? = null) {
     val isUser = message.role == ChatRole.USER
     Row(
         modifier = Modifier
@@ -432,7 +445,7 @@ private fun MessageRow(message: ChatMessage, onCopy: () -> Unit) {
                 .clip(RoundedCornerShape(14.dp))
                 .background(bg)
                 .border(1.dp, border, RoundedCornerShape(14.dp))
-                .combinedClickable(onClick = {}, onLongClick = onCopy)
+                .combinedClickable(onClick = { if (isUser) onEdit?.invoke() }, onLongClick = onCopy)
                 .padding(horizontal = 12.dp, vertical = 10.dp)
         ) {
             if (!isUser) {
@@ -453,22 +466,41 @@ private fun MessageRow(message: ChatMessage, onCopy: () -> Unit) {
                     }
                 }
                 Spacer(Modifier.height(4.dp))
-            }
-            Text(
-                text = if (message.content.isBlank() && message.isStreaming) "Thinking..." else message.content,
-                color = if (message.isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
-                style = TextStyle(
-                    fontSize = 14.sp,
-                    lineHeight = 20.sp,
-                    fontFamily = if (!isUser && (message.content.contains("```") || message.content.contains("\n    "))) FontFamily.Monospace else FontFamily.Default
+            } else if (onEdit != null) {
+                Text(
+                    text = "Tap to edit & resend • long press to copy",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-            )
+                Spacer(Modifier.height(4.dp))
+            }
+            val display = if (message.content.isBlank() && message.isStreaming) "Thinking..." else message.content
+            if (!isUser && !message.isError && display.isNotBlank()) {
+                Markdown(
+                    content = display,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            } else {
+                Text(
+                    text = display,
+                    color = if (message.isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+                    style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp, fontFamily = if (!isUser && (display.contains("```") || display.contains("\n    "))) FontFamily.Monospace else FontFamily.Default)
+                )
+            }
             if (message.isStreaming && message.content.isNotBlank()) {
                 Spacer(Modifier.height(4.dp))
                 Text("● streaming", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
+}
+
+private fun formatMetrics(m: GenerationMetrics, generating: Boolean): String {
+    val ttft = m.ttftMs?.let { "${it}ms TTFT" }
+    val total = m.totalMs?.let { "${it}ms" }
+    val cps = m.charsPerSec?.let { String.format("%.1f chars/s", it) }
+    val parts = listOfNotNull(if (generating) "generating" else null, ttft, total, cps)
+    return if (parts.isEmpty()) "ready" else parts.joinToString(" • ")
 }
 
 @Composable
@@ -572,11 +604,17 @@ private fun SettingsScreen(
     onClearCurrentChat: () -> Unit,
     onClearAllChats: () -> Unit,
     onExportChats: () -> String,
-    onRenameSession: (String, String) -> Unit
+    onImportChats: (String) -> Boolean,
+    onRenameSession: (String, String) -> Unit,
+    onModelDownloadUrlChange: (String) -> Unit,
+    onDownloadModel: () -> Unit,
+    onTestApi: () -> Unit,
+    onRefreshModels: () -> Unit
 ) {
     val clipboard = LocalClipboardManager.current
     val context = LocalContext.current
     var renameText by remember(state.activeSession.id, state.activeSession.title) { mutableStateOf(state.activeSession.title) }
+    var importText by remember { mutableStateOf("") }
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
@@ -643,6 +681,12 @@ private fun SettingsScreen(
                 item {
                     val status = if (state.apiConfig.isConfigured) "Endpoint configured and will be used for chat." else "No endpoint configured. Add a URL to use Remote API."
                     Text(status, style = MaterialTheme.typography.bodySmall, color = if (state.apiConfig.isConfigured) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error)
+                    Spacer(Modifier.height(8.dp))
+                    ActionButton("Test endpoint", primary = true, enabled = state.apiConfig.isConfigured) { onTestApi() }
+                    state.apiTestMessage?.let {
+                        Spacer(Modifier.height(6.dp))
+                        Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
                 item {
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
@@ -663,6 +707,45 @@ private fun SettingsScreen(
                 item { StatusPill(status = state.modelStatus) }
                 item { SettingsTextField("Model path", state.modelPathInput, "/storage/.../models/model.litertlm", onPathChange, mono = true) }
                 item {
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        ActionButton(text = if (state.modelStatus.isLoading) "Loading..." else "Load model", primary = true, enabled = !state.modelStatus.isLoading, onClick = onLoad)
+                        ActionButton(text = "Unload", primary = false, enabled = state.modelStatus.isReady, onClick = onUnload)
+                        ActionButton(text = "Refresh", primary = false, enabled = true, onClick = onRefreshModels)
+                    }
+                }
+                item {
+                    Text("Model manager", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurface)
+                    Spacer(Modifier.height(6.dp))
+                    SettingsTextField("Download model URL (.litertlm)", state.modelDownloadUrl, "https://.../model.litertlm", onModelDownloadUrlChange, mono = true)
+                    Spacer(Modifier.height(8.dp))
+                    ActionButton("Download model", primary = true, enabled = state.modelDownloadUrl.isNotBlank()) { onDownloadModel() }
+                    state.busyMessage?.let {
+                        Spacer(Modifier.height(6.dp))
+                        Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+                item {
+                    Text("Available models", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurface)
+                    Spacer(Modifier.height(6.dp))
+                    if (state.availableModels.isEmpty()) {
+                        Text("No .litertlm models found in app storage.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    } else {
+                        state.availableModels.forEach { path ->
+                            val name = path.substringAfterLast('/')
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.surface).clickable { onPathChange(path) }.padding(10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(name, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodySmall)
+                                    Text(path, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                }
+                                Text(if (state.modelPathInput == path) "Selected" else "Use", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelSmall)
+                            }
+                        }
+                    }
+                }
+                item {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
@@ -673,12 +756,6 @@ private fun SettingsScreen(
                             Text("Try GPU for supported models/devices; behavior depends on runtime.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         Switch(checked = state.useGpu, onCheckedChange = onGpuChange)
-                    }
-                }
-                item {
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        ActionButton(text = if (state.modelStatus.isLoading) "Loading..." else "Load model", primary = true, enabled = !state.modelStatus.isLoading, onClick = onLoad)
-                        ActionButton(text = "Unload", primary = false, enabled = state.modelStatus.isReady, onClick = onUnload)
                     }
                 }
                 item {
@@ -727,6 +804,14 @@ private fun SettingsScreen(
                     val json = onExportChats().ifBlank { "{\"sessions\":[]}" }
                     clipboard.setText(AnnotatedString(json))
                     Toast.makeText(context, "Chats JSON copied", Toast.LENGTH_SHORT).show()
+                }
+                Spacer(Modifier.height(10.dp))
+                SettingsTextField("Import chats JSON (paste)", importText, "{\"activeSessionId\":...,\"sessions\":[...]}", { importText = it }, mono = true)
+                Spacer(Modifier.height(8.dp))
+                ActionButton("Import chats", primary = false, enabled = importText.isNotBlank()) {
+                    val ok = onImportChats(importText)
+                    Toast.makeText(context, if (ok) "Chats imported" else "Import failed (invalid JSON)", Toast.LENGTH_SHORT).show()
+                    if (ok) importText = ""
                 }
             }
         }
