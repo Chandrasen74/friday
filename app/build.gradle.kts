@@ -20,8 +20,8 @@ android {
         applicationId = "com.friday.assistant"
         minSdk = 26
         targetSdk = 35
-        versionCode = 25
-        versionName = "0.7.9"
+        versionCode = 24
+        versionName = "0.7.8"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
