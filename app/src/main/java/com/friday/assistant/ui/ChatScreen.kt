@@ -1,6 +1,8 @@
 ﻿package com.friday.assistant.ui
 
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -91,7 +93,9 @@ import com.friday.assistant.data.GenerationMetrics
 import com.friday.assistant.data.InferenceMode
 import com.friday.assistant.data.ModelStatus
 import com.mikepenz.markdown.m3.Markdown
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
@@ -851,9 +855,21 @@ private fun ChatsStorageScreen(
 ) {
     val clipboard = LocalClipboardManager.current
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val activeSession = state.activeSession
     var renameText by remember(activeSession?.id, activeSession?.title) { mutableStateOf(activeSession?.title ?: "") }
-    var importText by remember { mutableStateOf("") }
+    val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            val text = withContext(Dispatchers.IO) {
+                runCatching {
+                    context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+                }.getOrNull()
+            }
+            val ok = !text.isNullOrBlank() && onImportChats(text)
+            Toast.makeText(context, if (ok) "Chats imported" else "Import failed (invalid JSON file)", Toast.LENGTH_SHORT).show()
+        }
+    }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -922,13 +938,15 @@ private fun ChatsStorageScreen(
                     Toast.makeText(context, "Chats JSON copied", Toast.LENGTH_SHORT).show()
                 }
                 Spacer(Modifier.height(10.dp))
-                SettingsTextField("Import chats JSON (paste)", importText, "{\"activeSessionId\":...,\"sessions\":[...]}", { importText = it }, mono = true)
-                Spacer(Modifier.height(8.dp))
-                ActionButton("Import chats", primary = false, enabled = importText.isNotBlank()) {
-                    val ok = onImportChats(importText)
-                    Toast.makeText(context, if (ok) "Chats imported" else "Import failed (invalid JSON)", Toast.LENGTH_SHORT).show()
-                    if (ok) importText = ""
+                ActionButton("Upload chats JSON file", primary = false, enabled = true) {
+                    importLauncher.launch(arrayOf("application/json", "text/plain", "*/*"))
                 }
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    "Select a .json file previously exported from FRIDAY to import chats.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
     }
