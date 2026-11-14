@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 data class ChatUiState(
@@ -121,8 +122,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     fun onModelDownloadUrlChange(value: String) { _uiState.update { it.copy(modelDownloadUrl = value) } }
 
     fun refreshAvailableModels() {
-        val models = LiteRtLmService.listAvailableModels(getApplication())
-        _uiState.update { it.copy(availableModels = models) }
+        viewModelScope.launch(Dispatchers.IO) {
+            val models = LiteRtLmService.listAvailableModels(getApplication())
+            _uiState.update { it.copy(availableModels = models) }
+        }
     }
 
     fun downloadModel() {
@@ -166,38 +169,45 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     fun saveApiConfig() { apiService.saveConfig(_uiState.value.apiConfig) }
 
+    private val persistMutex = kotlinx.coroutines.sync.Mutex()
+
     private fun persistChats() {
         val snapshot = _uiState.value
         viewModelScope.launch(Dispatchers.IO) {
-            chatStore.save(snapshot.sessions, snapshot.activeSessionId)
+            persistMutex.withLock {
+                chatStore.save(snapshot.sessions, snapshot.activeSessionId)
+            }
         }
     }
 
     fun newSession() {
+        if (_uiState.value.isGenerating) stopGeneration()
         val session = ChatSession(
             title = "New session",
             messages = listOf(ChatMessage(role = ChatRole.ASSISTANT, content = "New session started. How can I help?"))
         )
         _uiState.update { state ->
-            state.copy(sessions = listOf(session) + state.sessions, activeSessionId = session.id, input = "", settingsOpen = false)
+            state.copy(sessions = listOf(session) + state.sessions, activeSessionId = session.id, input = "", settingsOpen = false, editingMessageId = null)
         }
         persistChats()
     }
 
     fun selectSession(id: String) {
-        _uiState.update { it.copy(activeSessionId = id, settingsOpen = false) }
+        if (_uiState.value.isGenerating) stopGeneration()
+        _uiState.update { it.copy(activeSessionId = id, settingsOpen = false, editingMessageId = null) }
         persistChats()
     }
 
     fun deleteSession(id: String) {
+        if (_uiState.value.activeSessionId == id && _uiState.value.isGenerating) stopGeneration()
         _uiState.update { state ->
             val remaining = state.sessions.filterNot { it.id == id }
             if (remaining.isEmpty()) {
                 val fresh = ChatSession()
-                state.copy(sessions = listOf(fresh), activeSessionId = fresh.id)
+                state.copy(sessions = listOf(fresh), activeSessionId = fresh.id, editingMessageId = null)
             } else {
                 val active = if (state.activeSessionId == id) remaining.first().id else state.activeSessionId
-                state.copy(sessions = remaining, activeSessionId = active)
+                state.copy(sessions = remaining, activeSessionId = active, editingMessageId = if (state.activeSessionId == id) null else state.editingMessageId)
             }
         }
         persistChats()
@@ -230,6 +240,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun stopGeneration() {
+        if (!_uiState.value.isGenerating) return
         generationJob?.cancel()
         generationJob = null
         _uiState.update { state ->
@@ -237,14 +248,12 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 isGenerating = false,
                 metrics = state.metrics.copy(finishedAtMs = System.currentTimeMillis()),
                 sessions = state.sessions.map { session ->
-                    if (session.id == state.activeSessionId) {
-                        session.copy(
-                            messages = session.messages.map { m ->
-                                if (m.isStreaming) m.copy(isStreaming = false, content = m.content.ifBlank { "(stopped)" }) else m
-                            },
-                            updatedAt = System.currentTimeMillis()
-                        )
-                    } else session
+                    session.copy(
+                        messages = session.messages.map { m ->
+                            if (m.isStreaming) m.copy(isStreaming = false, content = m.content.ifBlank { "(stopped)" }) else m
+                        },
+                        updatedAt = if (session.messages.any { it.isStreaming }) System.currentTimeMillis() else session.updatedAt
+                    )
                 }
             )
         }
@@ -253,6 +262,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     fun regenerateLastResponse() {
         if (_uiState.value.isGenerating) return
+        generationJob?.cancel()
         val session = _uiState.value.activeSession
         val lastAssistantIdx = session.messages.indexOfLast { it.role == ChatRole.ASSISTANT }
         val lastUserIdx = session.messages.indexOfLast { it.role == ChatRole.USER }
@@ -264,6 +274,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.update { state ->
             state.copy(
                 isGenerating = true,
+                editingMessageId = null,
                 sessions = state.sessions.map { s ->
                     if (s.id == session.id) s.copy(messages = trimmed + placeholder, updatedAt = System.currentTimeMillis()) else s
                 }
@@ -281,9 +292,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun clearCurrentSession() {
+        if (_uiState.value.isGenerating) stopGeneration()
         val sessionId = _uiState.value.activeSessionId
         _uiState.update { state ->
-            state.copy(sessions = state.sessions.map { s ->
+            state.copy(editingMessageId = null, sessions = state.sessions.map { s ->
                 if (s.id == sessionId) s.copy(
                     title = "New session",
                     messages = listOf(ChatMessage(role = ChatRole.ASSISTANT, content = "Chat cleared. How can I help?")),
@@ -295,19 +307,26 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun clearAllChats() {
+        if (_uiState.value.isGenerating) stopGeneration()
         val fresh = ChatSession(title = "New session", messages = listOf(ChatMessage(role = ChatRole.ASSISTANT, content = "Hi, I'm FRIDAY. How can I help?")))
-        _uiState.update { it.copy(sessions = listOf(fresh), activeSessionId = fresh.id, input = "") }
-        viewModelScope.launch(Dispatchers.IO) { chatStore.clear(); chatStore.save(_uiState.value.sessions, _uiState.value.activeSessionId) }
+        _uiState.update { it.copy(sessions = listOf(fresh), activeSessionId = fresh.id, input = "", editingMessageId = null) }
+        viewModelScope.launch(Dispatchers.IO) {
+            persistMutex.withLock {
+                chatStore.clear()
+                chatStore.save(listOf(fresh), fresh.id)
+            }
+        }
     }
 
     fun exportChatsJson(): String = chatStore.exportJson()
 
     fun importChatsJson(json: String): Boolean {
-        val (sessions, activeId) = chatStore.importJson(json)
+        val (sessions, activeId) = chatStore.parseImport(json)
         if (sessions.isEmpty()) return false
         val fixed = sessions.map { s -> s.copy(messages = s.messages.map { it.copy(isStreaming = false) }) }
-        _uiState.update { it.copy(sessions = fixed, activeSessionId = activeId ?: fixed.first().id) }
-        persistChats()
+        val resolvedActive = activeId ?: fixed.first().id
+        _uiState.update { it.copy(sessions = fixed, activeSessionId = resolvedActive, settingsOpen = false) }
+        viewModelScope.launch(Dispatchers.IO) { chatStore.save(fixed, resolvedActive) }
         return true
     }
 
@@ -323,6 +342,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     fun sendMessage() {
         val prompt = _uiState.value.input.trim()
         if (prompt.isBlank() || _uiState.value.isGenerating) return
+        generationJob?.cancel()
 
         val stateNow = _uiState.value
         val sessionId = stateNow.activeSessionId
@@ -438,9 +458,15 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 }
             } catch (e: kotlinx.coroutines.CancellationException) {
-                val stopped = _uiState.value.sessions.flatMap { it.messages }.firstOrNull { it.id == assistantId }?.content?.ifBlank { "(stopped)" } ?: "(stopped)"
-                _uiState.update { it.copy(metrics = it.metrics.copy(finishedAtMs = System.currentTimeMillis(), outputChars = stopped.length)) }
-                appendToAssistant(sessionId, assistantId, stopped, done = true, error = false)
+                val current = _uiState.value.sessions.flatMap { it.messages }.firstOrNull { it.id == assistantId }
+                val stopped = current?.content?.ifBlank { "(stopped)" } ?: "(stopped)"
+                _uiState.update { it.copy(metrics = it.metrics.copy(finishedAtMs = System.currentTimeMillis(), outputChars = stopped.length), isGenerating = false) }
+                if (current?.isStreaming != false) {
+                    appendToAssistant(sessionId, assistantId, stopped, done = true, error = false)
+                } else {
+                    persistChats()
+                }
+                throw e
             } catch (e: Exception) {
                 val msg = "Error: ${e.message ?: "generation failed"}"
                 _uiState.update { it.copy(metrics = it.metrics.copy(finishedAtMs = System.currentTimeMillis(), outputChars = msg.length)) }
