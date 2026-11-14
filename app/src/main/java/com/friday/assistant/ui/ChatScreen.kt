@@ -1,4 +1,4 @@
-package com.friday.assistant.ui
+﻿package com.friday.assistant.ui
 
 import android.widget.Toast
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -325,12 +325,13 @@ private fun ChatScreen(
     onRegenerate: () -> Unit,
     onEditMessage: (String) -> Unit
 ) {
+    val session = state.activeSession
     val listState = rememberLazyListState()
-    val messages = state.activeSession.messages
+    val messages = session?.messages.orEmpty()
     val clipboard = LocalClipboardManager.current
     val context = LocalContext.current
 
-    LaunchedEffect(messages.size, messages.lastOrNull()?.content) {
+    LaunchedEffect(session?.id, messages.size, messages.lastOrNull()?.content) {
         if (messages.isNotEmpty()) {
             listState.animateScrollToItem(messages.lastIndex)
         }
@@ -352,10 +353,10 @@ private fun ChatScreen(
                     }
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = state.activeSession.title,
+                            text = session?.title ?: "FRIDAY",
                             style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
                             color = MaterialTheme.colorScheme.onSurface,
-                            maxLines = 2,
+                            maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
                         val mode = when {
@@ -368,11 +369,11 @@ private fun ChatScreen(
                             text = "$mode • ${formatMetrics(state.metrics, state.isGenerating)}",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
+                            maxLines = 2,
                             overflow = TextOverflow.Ellipsis
                         )
                     }
-                    IconButton(onClick = onRegenerate, enabled = !state.isGenerating) {
+                    IconButton(onClick = onRegenerate, enabled = !state.isGenerating && session != null) {
                         Icon(Icons.Default.Refresh, contentDescription = "Regenerate", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     IconButton(onClick = onNew) {
@@ -386,35 +387,66 @@ private fun ChatScreen(
             }
         },
         bottomBar = {
-            ComposerBar(
-                value = state.input,
-                isGenerating = state.isGenerating,
-                onValueChange = onInputChange,
-                onSend = onSend,
-                onStop = onStop
-            )
-        }
-    ) { padding ->
-        LazyColumn(
-            state = listState,
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .background(MaterialTheme.colorScheme.background),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            item { Spacer(Modifier.height(8.dp)) }
-            items(messages, key = { it.id }) { msg ->
-                MessageRow(
-                    message = msg,
-                    onCopy = {
-                        clipboard.setText(AnnotatedString(msg.content))
-                        Toast.makeText(context, "Copied", Toast.LENGTH_SHORT).show()
-                    },
-                    onEdit = if (msg.role == ChatRole.USER && !state.isGenerating) { { onEditMessage(msg.id); Toast.makeText(context, "Editing message", Toast.LENGTH_SHORT).show() } } else null
+            if (session != null) {
+                ComposerBar(
+                    value = state.input,
+                    isGenerating = state.isGenerating,
+                    onValueChange = onInputChange,
+                    onSend = onSend,
+                    onStop = onStop
                 )
             }
-            item { Spacer(Modifier.height(12.dp)) }
+        }
+    ) { padding ->
+        if (session == null) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .background(MaterialTheme.colorScheme.background),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.padding(24.dp)
+                ) {
+                    Text(
+                        text = "No chats yet",
+                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = "Create a new chat to start a conversation with FRIDAY.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.height(20.dp))
+                    ActionButton(text = "Create new chat", primary = true, enabled = true, onClick = onNew)
+                }
+            }
+        } else {
+            LazyColumn(
+                state = listState,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .background(MaterialTheme.colorScheme.background),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                item { Spacer(Modifier.height(8.dp)) }
+                items(messages, key = { it.id }) { msg ->
+                    MessageRow(
+                        message = msg,
+                        onCopy = {
+                            clipboard.setText(AnnotatedString(msg.content))
+                            Toast.makeText(context, "Copied", Toast.LENGTH_SHORT).show()
+                        },
+                        onEdit = if (msg.role == ChatRole.USER && !state.isGenerating) { { onEditMessage(msg.id); Toast.makeText(context, "Editing message", Toast.LENGTH_SHORT).show() } } else null
+                    )
+                }
+                item { Spacer(Modifier.height(12.dp)) }
+            }
         }
     }
 }
@@ -483,7 +515,7 @@ private fun MessageRow(message: ChatMessage, onCopy: () -> Unit, onEdit: (() -> 
                 Spacer(Modifier.height(4.dp))
             } else if (onEdit != null) {
                 Text(
-                    text = "Tap to edit & resend • long press to copy",
+                    text = "Tap to edit & resend â€¢ long press to copy",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -504,7 +536,7 @@ private fun MessageRow(message: ChatMessage, onCopy: () -> Unit, onEdit: (() -> 
             }
             if (message.isStreaming && message.content.isNotBlank()) {
                 Spacer(Modifier.height(4.dp))
-                Text("● streaming", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("â— streaming", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
@@ -520,7 +552,7 @@ private fun formatMetrics(m: GenerationMetrics, generating: Boolean): String {
     val chunks = if (m.chunkCount > 0) "${m.chunkCount} chunks" else null
     val model = m.modelName.takeIf { it.isNotBlank() }
     val parts = listOfNotNull(if (generating) "generating" else null, model, ttft, total, tps, cps, out, chunks)
-    return if (parts.isEmpty()) "ready" else parts.joinToString(" • ")
+    return if (parts.isEmpty()) "ready" else parts.joinToString(" â€¢ ")
 }
 
 @Composable
@@ -810,7 +842,8 @@ private fun ChatsStorageScreen(
 ) {
     val clipboard = LocalClipboardManager.current
     val context = LocalContext.current
-    var renameText by remember(state.activeSession.id, state.activeSession.title) { mutableStateOf(state.activeSession.title) }
+    val activeSession = state.activeSession
+    var renameText by remember(activeSession?.id, activeSession?.title) { mutableStateOf(activeSession?.title ?: "") }
     var importText by remember { mutableStateOf("") }
 
     Scaffold(
@@ -849,20 +882,24 @@ private fun ChatsStorageScreen(
                 Text("Chats are saved locally on device (durable app storage) and restored on launch.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             item {
-                SettingsTextField("Rename current session", renameText, "Session title", { renameText = it })
-                Spacer(Modifier.height(8.dp))
-                ActionButton("Save title", primary = true, enabled = renameText.isNotBlank()) {
-                    onRenameSession(state.activeSessionId, renameText)
-                    Toast.makeText(context, "Session renamed", Toast.LENGTH_SHORT).show()
+                if (activeSession != null) {
+                    SettingsTextField("Rename current session", renameText, "Session title", { renameText = it })
+                    Spacer(Modifier.height(8.dp))
+                    ActionButton("Save title", primary = true, enabled = renameText.isNotBlank()) {
+                        onRenameSession(activeSession.id, renameText)
+                        Toast.makeText(context, "Session renamed", Toast.LENGTH_SHORT).show()
+                    }
+                } else {
+                    Text("No active chat session to rename. Create a new chat from the main screen.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
             item {
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    ActionButton("Clear current chat", primary = false, enabled = true) {
+                    ActionButton("Clear current chat", primary = false, enabled = activeSession != null) {
                         onClearCurrentChat()
                         Toast.makeText(context, "Current chat cleared", Toast.LENGTH_SHORT).show()
                     }
-                    ActionButton("Clear all chats", primary = false, enabled = true) {
+                    ActionButton("Clear all chats", primary = false, enabled = state.sessions.isNotEmpty()) {
                         onClearAllChats()
                         Toast.makeText(context, "All chats cleared", Toast.LENGTH_SHORT).show()
                     }
