@@ -112,14 +112,15 @@ class LiteRtLmService(private val appContext: Context) {
                         val chunk = message.toString()
                         if (chunk.isNotEmpty()) {
                             buffer.append(chunk)
-                            trySend(buffer.toString())
+                            val cleaned = sanitizeLocalOutput(buffer.toString(), streaming = true)
+                            if (cleaned.isNotBlank()) trySend(cleaned)
                         }
                     }
 
                     override fun onDone() {
                         if (completed.get()) return
-                        val text = buffer.toString().trim()
-                        if (text.isEmpty()) trySend("(empty response)") else trySend(text)
+                        val text = sanitizeLocalOutput(buffer.toString(), streaming = false).ifBlank { "(empty response)" }
+                        trySend(text)
                         complete()
                     }
 
@@ -173,6 +174,40 @@ class LiteRtLmService(private val appContext: Context) {
             },
             lastError = error
         )
+    }
+
+    private fun sanitizeLocalOutput(raw: String, streaming: Boolean): String {
+        if (raw.isEmpty()) return raw
+        var text = raw.replace("\uFEFF", "")
+        // Drop common leading control tokens/role markers that can appear with some LiteRT/chat templates.
+        val leadingPatterns = listOf(
+            Regex("""^(?:<\|im_start\|>\s*assistant\s*)+""", RegexOption.IGNORE_CASE),
+            Regex("""^(?:<\|assistant\|>\s*)+""", RegexOption.IGNORE_CASE),
+            Regex("""^(?:assistant\s*[:：]\s*)+""", RegexOption.IGNORE_CASE),
+            Regex("""^(?:model\s*[:：]\s*)+""", RegexOption.IGNORE_CASE)
+        )
+        var changed = true
+        var guard = 0
+        while (changed && guard++ < 8) {
+            changed = false
+            val trimmedStart = text.trimStart('\n', '\r', ' ', '\t')
+            if (trimmedStart !== text && trimmedStart != text) {
+                // keep intentional leading spaces only after real content appears; during early stream trim aggressively
+                text = trimmedStart
+                changed = true
+            }
+            for (p in leadingPatterns) {
+                val m = p.find(text)
+                if (m != null && m.range.first == 0 && m.value.isNotEmpty()) {
+                    text = text.removeRange(m.range)
+                    changed = true
+                }
+            }
+        }
+        // Remove trailing end tokens if emitted
+        text = text.replace(Regex("""<\|im_end\|>\s*$""", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("""<\|endoftext\|>\s*$""", RegexOption.IGNORE_CASE), "")
+        return if (streaming) text.trimStart('\n', '\r') else text.trim()
     }
 
     companion object {
