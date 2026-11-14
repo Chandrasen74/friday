@@ -6,20 +6,20 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
 private val OpenCodeDarkColorScheme = darkColorScheme(
-    primary = Color(0xFFE6E6E6),
-    onPrimary = Color(0xFF111111),
-    primaryContainer = Color(0xFF2A2A2A),
-    onPrimaryContainer = Color(0xFFF2F2F2),
-    secondary = Color(0xFFBDBDBD),
-    onSecondary = Color(0xFF121212),
-    background = Color(0xFF0F0F10),
+    primary = Color(0xFF7DD3FC),
+    onPrimary = Color(0xFF0B1720),
+    primaryContainer = Color(0xFF1E3A52),
+    onPrimaryContainer = Color(0xFFE6F6FF),
+    secondary = Color(0xFF93C5FD),
+    onSecondary = Color(0xFF0B1720),
+    background = Color(0xFF1A1A1D),
     onBackground = Color(0xFFEDEDED),
-    surface = Color(0xFF141416),
+    surface = Color(0xFF202024),
     onSurface = Color(0xFFEDEDED),
-    surfaceVariant = Color(0xFF1C1C1F),
-    onSurfaceVariant = Color(0xFFA1A1AA),
-    outline = Color(0xFF2E2E33),
-    outlineVariant = Color(0xFF252529),
+    surfaceVariant = Color(0xFF26262B),
+    onSurfaceVariant = Color(0xFFA8B3C2),
+    outline = Color(0xFF334155),
+    outlineVariant = Color(0xFF2A2F36),
     error = Color(0xFFF87171),
     onError = Color(0xFF1A1A1A)
 )

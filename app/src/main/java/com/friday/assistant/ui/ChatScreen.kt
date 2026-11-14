@@ -4,6 +4,7 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -72,6 +73,7 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
@@ -85,6 +87,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.ExperimentalComposeUiApi
 import java.util.Locale
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.friday.assistant.R
 import com.friday.assistant.data.ApiEndpointConfig
 import com.friday.assistant.data.ChatMessage
 import com.friday.assistant.data.ChatRole
@@ -92,6 +95,7 @@ import com.friday.assistant.data.ChatSession
 import com.friday.assistant.data.GenerationMetrics
 import com.friday.assistant.data.InferenceMode
 import com.friday.assistant.data.ModelStatus
+import com.friday.assistant.ui.theme.FridayDisplayFont
 import com.mikepenz.markdown.m3.Markdown
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -206,11 +210,19 @@ private fun DrawerContent(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Text(
-                text = "FRIDAY",
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                color = MaterialTheme.colorScheme.onSurface
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Image(
+                    painter = painterResource(id = R.drawable.friday_logo_blue),
+                    contentDescription = "F.R.I.D.A.Y logo",
+                    modifier = Modifier.size(28.dp)
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = "F.R.I.D.A.Y",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, fontFamily = FridayDisplayFont),
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
             IconButton(onClick = onNewSession) {
                 Icon(Icons.Default.Add, contentDescription = "New session", tint = MaterialTheme.colorScheme.onSurface)
             }
@@ -367,9 +379,12 @@ private fun ChatScreen(
                     }
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = session?.title ?: "FRIDAY",
-                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
-                            color = MaterialTheme.colorScheme.onSurface,
+                            text = session?.title ?: "F.R.I.D.A.Y",
+                            style = MaterialTheme.typography.titleSmall.copy(
+                                fontWeight = if (session == null) FontWeight.Bold else FontWeight.SemiBold,
+                                fontFamily = if (session == null) FridayDisplayFont else FontFamily.Default
+                            ),
+                            color = if (session == null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -421,14 +436,26 @@ private fun ChatScreen(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     modifier = Modifier.padding(24.dp)
                 ) {
+                    Image(
+                        painter = painterResource(id = R.drawable.friday_logo_blue),
+                        contentDescription = "F.R.I.D.A.Y logo",
+                        modifier = Modifier.size(120.dp)
+                    )
+                    Spacer(Modifier.height(16.dp))
                     Text(
-                        text = "No chats yet",
-                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
-                        color = MaterialTheme.colorScheme.onSurface
+                        text = "F.R.I.D.A.Y",
+                        style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold, fontFamily = FridayDisplayFont),
+                        color = MaterialTheme.colorScheme.primary
                     )
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        text = "Create a new chat to start a conversation with FRIDAY.",
+                        text = "No chats yet",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        text = "Create a new chat to start a conversation with F.R.I.D.A.Y.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -509,9 +536,9 @@ private fun MessageRow(message: ChatMessage, onCopy: () -> Unit, onEdit: (() -> 
             if (!isUser) {
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                     Text(
-                        text = "FRIDAY",
-                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        text = "F.R.I.D.A.Y",
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, fontFamily = FridayDisplayFont),
+                        color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.weight(1f)
                     )
                     if (message.content.isNotBlank() && !message.isStreaming) {
@@ -598,7 +625,7 @@ private fun ComposerBar(
             ) {
                 if (value.isBlank()) {
                     Text(
-                        text = if (isGenerating) "Generating..." else "Message FRIDAY...",
+                        text = if (isGenerating) "Generating..." else "Message F.R.I.D.A.Y...",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.bodyMedium
                     )
