@@ -11,11 +11,9 @@ F.R.I.D.A.Y is an on-device-first personal assistant for Android inspired by Ton
 
 ## Screenshots
 
-HTML demo preview: [`friday-demo.html`](friday-demo.html)
-
 | Chat | Sessions drawer | Conversation |
 | --- | --- | --- |
-| ![F.R.I.D.A.Y chat with fake conversation](screenshots/demo-chat.png) | ![F.R.I.D.A.Y sessions drawer](screenshots/demo-drawer.png) | ![F.R.I.D.A.Y coding help conversation](screenshots/demo-chat2.png) |
+| ![F.R.I.D.A.Y chat](screenshots/demo-chat.png) | ![F.R.I.D.A.Y sessions drawer](screenshots/demo-drawer.png) | ![F.R.I.D.A.Y coding help conversation](screenshots/demo-chat2.png) |
 
 ## Features
 
