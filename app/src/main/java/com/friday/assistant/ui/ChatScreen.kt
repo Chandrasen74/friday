@@ -33,6 +33,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
@@ -67,6 +68,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
@@ -77,6 +80,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.ExperimentalComposeUiApi
 import java.util.Locale
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.friday.assistant.data.ApiEndpointConfig
@@ -89,14 +93,18 @@ import com.friday.assistant.data.ModelStatus
 import com.mikepenz.markdown.m3.Markdown
 import kotlinx.coroutines.launch
 
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun FridayApp(viewModel: ChatViewModel) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
 
     ModalNavigationDrawer(
         drawerState = drawerState,
+        gesturesEnabled = !state.settingsOpen,
         drawerContent = {
             ModalDrawerSheet(
                 drawerContainerColor = MaterialTheme.colorScheme.surface,
@@ -155,9 +163,12 @@ fun FridayApp(viewModel: ChatViewModel) {
             else -> {
                 ChatScreen(
                     state = state,
-                    onMenu = { scope.launch { drawerState.open() } },
+                    onMenu = {
+                        focusManager.clearFocus()
+                        keyboardController?.hide()
+                        scope.launch { drawerState.open() }
+                    },
                     onNew = { viewModel.newSession() },
-                    onSettings = { viewModel.toggleSettings(true) },
                     onInputChange = viewModel::onInputChange,
                     onSend = viewModel::sendMessage,
                     onStop = viewModel::stopGeneration,
@@ -318,7 +329,6 @@ private fun ChatScreen(
     state: ChatUiState,
     onMenu: () -> Unit,
     onNew: () -> Unit,
-    onSettings: () -> Unit,
     onInputChange: (String) -> Unit,
     onSend: () -> Unit,
     onStop: () -> Unit,
@@ -378,9 +388,6 @@ private fun ChatScreen(
                     }
                     IconButton(onClick = onNew) {
                         Icon(Icons.Default.Add, contentDescription = "New", tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    IconButton(onClick = onSettings) {
-                        Icon(Icons.Default.Settings, contentDescription = "Settings", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
@@ -670,7 +677,9 @@ private fun SettingsScreen(
                         .padding(horizontal = 8.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    TextButton(onClick = onBack) { Text("Back") }
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = MaterialTheme.colorScheme.onSurface)
+                    }
                     Spacer(Modifier.width(4.dp))
                     Text(
                         "Settings",
@@ -857,7 +866,9 @@ private fun ChatsStorageScreen(
                         .padding(horizontal = 8.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    TextButton(onClick = onBack) { Text("Back") }
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = MaterialTheme.colorScheme.onSurface)
+                    }
                     Spacer(Modifier.width(4.dp))
                     Text(
                         "Chats & storage",
