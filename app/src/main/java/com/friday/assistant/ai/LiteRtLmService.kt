@@ -92,15 +92,16 @@ class LiteRtLmService(private val appContext: Context) {
     }
 
     fun currentStatus(configuredPath: String = "", loading: Boolean = false, error: String? = null): ModelStatus {
-        val ready = conversation != null && loadedPath != null
+        val path = loadedPath
+        val ready = engine != null && path != null
         return ModelStatus(
             configuredPath = configuredPath,
-            resolvedPath = loadedPath,
+            resolvedPath = path,
             isReady = ready,
             isLoading = loading,
             statusText = when {
                 loading -> "Loading model..."
-                ready -> "Model ready (${File(loadedPath!!).name})"
+                ready -> "Model ready (${File(path).name})"
                 error != null -> "Model error"
                 else -> "No local model loaded"
             },
