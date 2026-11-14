@@ -405,17 +405,19 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun startGeneration(sessionId: String, prompt: String, history: List<ChatMessage>, assistantId: String) {
         val start = System.currentTimeMillis()
+        val modeLabel = if (_uiState.value.inferenceMode == InferenceMode.REMOTE_API) "remote" else "local"
         val modelName = if (_uiState.value.inferenceMode == InferenceMode.REMOTE_API) {
-            _uiState.value.apiConfig.model.ifBlank { "remote" }
+            _uiState.value.apiConfig.model.ifBlank { _uiState.value.apiConfig.baseUrl.substringAfterLast('/').ifBlank { "remote-api" } }
         } else {
-            _uiState.value.modelStatus.resolvedPath?.substringAfterLast('/') ?: "local"
+            _uiState.value.modelStatus.resolvedPath?.substringAfterLast('/') ?: "local-model"
         }
-        _uiState.update { it.copy(metrics = GenerationMetrics(startedAtMs = start, modelName = modelName)) }
+        _uiState.update { it.copy(metrics = GenerationMetrics(startedAtMs = start, modelName = modelName, mode = modeLabel)) }
         generationJob = viewModelScope.launch {
             val mode = _uiState.value.inferenceMode
             val apiConfig = _uiState.value.apiConfig
             val localStatus = _uiState.value.modelStatus
             var first = true
+            var chunks = 0
             try {
                 when {
                     mode == InferenceMode.REMOTE_API -> {
@@ -426,7 +428,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                         } else {
                             val reply = apiService.generateReply(prompt, history, apiConfig)
                             val now = System.currentTimeMillis()
-                            _uiState.update { it.copy(metrics = it.metrics.copy(firstTokenAtMs = now, finishedAtMs = now, outputChars = reply.length)) }
+                            chunks = 1
+                            _uiState.update { it.copy(metrics = it.metrics.copy(firstTokenAtMs = it.metrics.firstTokenAtMs ?: now, finishedAtMs = now, outputChars = reply.length, chunkCount = chunks)) }
                             appendToAssistant(sessionId, assistantId, reply.ifBlank { "(empty response)" }, done = true, error = false)
                         }
                     }
@@ -441,26 +444,27 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                         var latest = ""
                         localService.generateReply(prompt, localHistory).collect { chunk ->
                             latest = chunk // service emits accumulated text
+                            chunks++
                             if (first && latest.isNotBlank()) {
                                 first = false
                                 _uiState.update { it.copy(metrics = it.metrics.copy(firstTokenAtMs = System.currentTimeMillis())) }
                             }
-                            _uiState.update { it.copy(metrics = it.metrics.copy(outputChars = latest.length)) }
+                            _uiState.update { it.copy(metrics = it.metrics.copy(outputChars = latest.length, chunkCount = chunks)) }
                             appendToAssistant(sessionId, assistantId, latest, done = false, error = false)
                         }
-                        _uiState.update { it.copy(metrics = it.metrics.copy(finishedAtMs = System.currentTimeMillis(), outputChars = latest.length)) }
+                        _uiState.update { it.copy(metrics = it.metrics.copy(finishedAtMs = System.currentTimeMillis(), outputChars = latest.length, chunkCount = chunks)) }
                         appendToAssistant(sessionId, assistantId, latest.ifBlank { "(empty response)" }, done = true, error = false)
                     }
                     else -> {
                         val fallback = buildFallbackReply(prompt, localStatus, apiConfig)
-                        _uiState.update { it.copy(metrics = it.metrics.copy(finishedAtMs = System.currentTimeMillis(), outputChars = fallback.length)) }
+                        _uiState.update { it.copy(metrics = it.metrics.copy(finishedAtMs = System.currentTimeMillis(), outputChars = fallback.length, chunkCount = 1)) }
                         appendToAssistant(sessionId, assistantId, fallback, done = true, error = false)
                     }
                 }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 val current = _uiState.value.sessions.flatMap { it.messages }.firstOrNull { it.id == assistantId }
                 val stopped = current?.content?.ifBlank { "(stopped)" } ?: "(stopped)"
-                _uiState.update { it.copy(metrics = it.metrics.copy(finishedAtMs = System.currentTimeMillis(), outputChars = stopped.length), isGenerating = false) }
+                _uiState.update { it.copy(metrics = it.metrics.copy(finishedAtMs = System.currentTimeMillis(), outputChars = stopped.length, chunkCount = chunks), isGenerating = false) }
                 if (current?.isStreaming != false) {
                     appendToAssistant(sessionId, assistantId, stopped, done = true, error = false)
                 } else {
@@ -469,7 +473,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 throw e
             } catch (e: Exception) {
                 val msg = "Error: ${e.message ?: "generation failed"}"
-                _uiState.update { it.copy(metrics = it.metrics.copy(finishedAtMs = System.currentTimeMillis(), outputChars = msg.length)) }
+                _uiState.update { it.copy(metrics = it.metrics.copy(finishedAtMs = System.currentTimeMillis(), outputChars = msg.length, chunkCount = chunks)) }
                 appendToAssistant(sessionId, assistantId, msg, done = true, error = true)
             } finally {
                 _uiState.update { it.copy(isGenerating = false) }

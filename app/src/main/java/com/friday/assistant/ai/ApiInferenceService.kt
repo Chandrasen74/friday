@@ -47,26 +47,11 @@ class ApiInferenceService(private val appContext: Context) {
             setRequestProperty("Accept", "application/json")
             if (config.apiKey.isNotBlank()) {
                 setRequestProperty("Authorization", "Bearer ${config.apiKey.trim()}")
+                setRequestProperty("x-api-key", config.apiKey.trim())
             }
         }
         try {
-            val messages = JSONArray()
-            messages.put(JSONObject().put("role", "system").put("content",
-                "You are FRIDAY, a helpful assistant. Answer the user's question directly, clearly, and completely."))
-            history.filter { it.role == ChatRole.USER || it.role == ChatRole.ASSISTANT }
-                .takeLast(10)
-                .forEach { m ->
-                    val role = if (m.role == ChatRole.USER) "user" else "assistant"
-                    messages.put(JSONObject().put("role", role).put("content", m.content))
-                }
-            messages.put(JSONObject().put("role", "user").put("content", prompt))
-
-            val body = JSONObject().apply {
-                if (config.model.isNotBlank()) put("model", config.model.trim())
-                put("messages", messages)
-                put("stream", false)
-                put("temperature", 0.3)
-            }
+            val body = buildRequestBody(endpoint, prompt, history, config)
             conn.outputStream.use { os ->
                 os.write(body.toString().toByteArray(Charsets.UTF_8))
             }
@@ -75,7 +60,7 @@ class ApiInferenceService(private val appContext: Context) {
             val stream = if (code in 200..299) conn.inputStream else (conn.errorStream ?: conn.inputStream)
             val text = stream.bufferedReader().use(BufferedReader::readText)
             if (code !in 200..299) {
-                error("API $code: ${text.take(300)}")
+                error("API $code: ${extractError(text)}")
             }
             parseResponse(text)
         } finally {
@@ -84,38 +69,162 @@ class ApiInferenceService(private val appContext: Context) {
     }
 
     private fun resolveEndpoint(baseUrl: String): String {
-        val u = baseUrl.trim().trimEnd('/')
+        val raw = baseUrl.trim()
+        val u = raw.trimEnd('/')
+        val lower = u.lowercase()
         return when {
-            u.endsWith("/chat/completions") -> u
-            u.endsWith("/v1") -> "$u/chat/completions"
-            u.contains("/v1/") -> u
+            lower.endsWith("/chat/completions") -> u
+            lower.endsWith("/api/chat") -> u
+            lower.endsWith("/api/generate") -> u
+            lower.endsWith("/v1/messages") -> u
+            lower.endsWith("/completions") -> u
+            lower.endsWith("/responses") -> u
+            lower.endsWith("/v1") -> "$u/chat/completions"
+            // if user provided a path (likely full endpoint), respect it
+            u.removePrefix("https://").removePrefix("http://").contains("/") -> u
             else -> "$u/v1/chat/completions"
         }
     }
 
-    private fun parseResponse(text: String): String {
-        val json = JSONObject(text)
-        // OpenAI-compatible: choices[0].message.content
-        val choices = json.optJSONArray("choices")
-        if (choices != null && choices.length() > 0) {
-            val msg = choices.optJSONObject(0)?.optJSONObject("message")
-            val content = msg?.optString("content")?.trim().orEmpty()
-            if (content.isNotEmpty()) return content
-            val textContent = choices.optJSONObject(0)?.optString("text")?.trim().orEmpty()
-            if (textContent.isNotEmpty()) return textContent
-        }
-        // Some APIs: output/content or response
-        json.optString("response").takeIf { it.isNotBlank() }?.let { return it.trim() }
-        json.optString("output").takeIf { it.isNotBlank() }?.let { return it.trim() }
-        // Try nested content arrays
-        val outputArr = json.optJSONArray("output")
-        if (outputArr != null && outputArr.length() > 0) {
-            val c = outputArr.optJSONObject(0)?.optJSONArray("content")
-            if (c != null && c.length() > 0) {
-                val t = c.optJSONObject(0)?.optString("text")?.trim().orEmpty()
-                if (t.isNotEmpty()) return t
+    private fun buildRequestBody(endpoint: String, prompt: String, history: List<ChatMessage>, config: ApiEndpointConfig): JSONObject {
+        val lower = endpoint.lowercase()
+        val filteredHistory = history.filter { it.role == ChatRole.USER || it.role == ChatRole.ASSISTANT }.takeLast(12)
+        return when {
+            lower.endsWith("/api/generate") -> JSONObject().apply {
+                if (config.model.isNotBlank()) put("model", config.model.trim())
+                put("prompt", buildPromptTranscript(prompt, filteredHistory))
+                put("stream", false)
+            }
+            lower.endsWith("/api/chat") -> JSONObject().apply {
+                if (config.model.isNotBlank()) put("model", config.model.trim())
+                put("messages", buildMessagesJson(prompt, filteredHistory, "You are FRIDAY, a helpful assistant. Answer directly and clearly."))
+                put("stream", false)
+            }
+            lower.endsWith("/v1/messages") -> JSONObject().apply {
+                if (config.model.isNotBlank()) put("model", config.model.trim()) else put("model", "claude")
+                put("max_tokens", 1024)
+                val msgs = JSONArray()
+                filteredHistory.forEach { m ->
+                    val role = if (m.role == ChatRole.USER) "user" else "assistant"
+                    msgs.put(JSONObject().put("role", role).put("content", m.content))
+                }
+                msgs.put(JSONObject().put("role", "user").put("content", prompt))
+                put("messages", msgs)
+            }
+            else -> JSONObject().apply {
+                if (config.model.isNotBlank()) put("model", config.model.trim())
+                put("messages", buildMessagesJson(prompt, filteredHistory, "You are FRIDAY, a helpful assistant. Answer the user's question directly, clearly, and completely."))
+                put("stream", false)
+                put("temperature", 0.3)
             }
         }
-        return text.take(1200)
+    }
+
+    private fun buildMessagesJson(prompt: String, history: List<ChatMessage>, system: String): JSONArray {
+        val messages = JSONArray()
+        messages.put(JSONObject().put("role", "system").put("content", system))
+        history.forEach { m ->
+            val role = if (m.role == ChatRole.USER) "user" else "assistant"
+            messages.put(JSONObject().put("role", role).put("content", m.content))
+        }
+        messages.put(JSONObject().put("role", "user").put("content", prompt))
+        return messages
+    }
+
+    private fun buildPromptTranscript(prompt: String, history: List<ChatMessage>): String = buildString {
+        append("You are FRIDAY, a helpful assistant. Answer directly and clearly.\n\n")
+        history.forEach { m ->
+            val role = if (m.role == ChatRole.USER) "User" else "Assistant"
+            append(role).append(": ").append(m.content.trim()).append("\n")
+        }
+        append("User: ").append(prompt.trim()).append("\nAssistant:")
+    }
+
+    private fun parseResponse(text: String): String {
+        val trimmed = text.trim()
+        if (trimmed.startsWith("{")) {
+            val json = JSONObject(trimmed)
+            // OpenAI-compatible: choices[0].message.content or choices[0].text
+            val choices = json.optJSONArray("choices")
+            if (choices != null && choices.length() > 0) {
+                val first = choices.optJSONObject(0)
+                val msg = first?.optJSONObject("message")
+                val content = extractText(msg?.opt("content")).ifBlank { extractText(first?.opt("text")) }
+                if (content.isNotBlank()) return content
+            }
+            // Ollama chat: { message: { content } } or generate: { response }
+            json.optJSONObject("message")?.let { m ->
+                val c = extractText(m.opt("content"))
+                if (c.isNotBlank()) return c
+            }
+            listOf("response", "output_text", "text", "result", "answer", "generated_text").forEach { key ->
+                val v = extractText(json.opt(key))
+                if (v.isNotBlank()) return v
+            }
+            // Anthropic-like: content [{type:text,text:...}]
+            val contentArr = json.optJSONArray("content")
+            if (contentArr != null) {
+                val c = extractText(contentArr)
+                if (c.isNotBlank()) return c
+            }
+            val outputArr = json.optJSONArray("output")
+            if (outputArr != null) {
+                val c = extractText(outputArr)
+                if (c.isNotBlank()) return c
+            }
+            json.optJSONObject("data")?.let { d ->
+                val c = extractText(d.opt("text")).ifBlank { extractText(d.opt("content")) }
+                if (c.isNotBlank()) return c
+            }
+            // Some APIs wrap in data array
+            json.optJSONArray("data")?.let { d ->
+                val c = extractText(d)
+                if (c.isNotBlank()) return c
+            }
+            return trimmed.take(1200)
+        }
+        // SSE or plain text fallback
+        if (trimmed.contains("data:")) {
+            val parts = trimmed.lineSequence()
+                .map { it.trim() }
+                .filter { it.startsWith("data:") }
+                .map { it.removePrefix("data:").trim() }
+                .filter { it.isNotBlank() && it != "[DONE]" }
+                .mapNotNull { part -> runCatching { parseResponse(part) }.getOrNull() }
+                .toList()
+            if (parts.isNotEmpty()) return parts.last().ifBlank { parts.joinToString("") }
+        }
+        return trimmed.take(1200)
+    }
+
+    private fun extractText(value: Any?): String {
+        return when (value) {
+            null, JSONObject.NULL -> ""
+            is String -> value.trim()
+            is JSONArray -> {
+                (0 until value.length()).mapNotNull { i ->
+                    val v = value.opt(i)
+                    when (v) {
+                        is JSONObject -> extractText(v.opt("text")).ifBlank { extractText(v.opt("content")) }.ifBlank { extractText(v.opt("value")) }
+                        is String -> v.trim()
+                        else -> extractText(v)
+                    }.ifBlank { null }
+                }.joinToString("\n").trim()
+            }
+            is JSONObject -> extractText(value.opt("text")).ifBlank { extractText(value.opt("content")) }.ifBlank { extractText(value.opt("value")) }
+            else -> value.toString().trim().takeIf { it != "null" }.orEmpty()
+        }
+    }
+
+    private fun extractError(text: String): String {
+        return try {
+            val json = JSONObject(text.trim())
+            val msg = json.optJSONObject("error")?.optString("message")
+                ?: json.optString("error")
+                ?: json.optString("message")
+            msg?.takeIf { it.isNotBlank() && it != "null" } ?: text.take(300)
+        } catch (_: Exception) {
+            text.take(300)
+        }
     }
 }
