@@ -6,12 +6,17 @@ import org.json.JSONObject
 import java.io.File
 
 class ChatStore(context: Context) {
-    private val file = File(context.cacheDir, "friday_chats.json")
+    private val file = File(context.filesDir, "friday_chats.json")
+    private val legacyCacheFile = File(context.cacheDir, "friday_chats.json")
 
     fun load(): Pair<List<ChatSession>, String?> {
-        if (!file.exists()) return emptyList<ChatSession>() to null
+        val source = when {
+            file.exists() -> file
+            legacyCacheFile.exists() -> legacyCacheFile
+            else -> return emptyList<ChatSession>() to null
+        }
         return try {
-            val text = file.readText()
+            val text = source.readText()
             val obj = JSONObject(text)
             val activeId = obj.optString("activeSessionId").ifBlank { null }
             val arr = obj.optJSONArray("sessions") ?: JSONArray()
@@ -43,6 +48,9 @@ class ChatStore(context: Context) {
                         updatedAt = s.optLong("updatedAt", System.currentTimeMillis())
                     )
                 )
+            }
+            if (source == legacyCacheFile && sessions.isNotEmpty()) {
+                runCatching { save(sessions, activeId ?: sessions.first().id) }
             }
             sessions to activeId
         } catch (_: Exception) {
@@ -80,5 +88,12 @@ class ChatStore(context: Context) {
             file.writeText(obj.toString())
         } catch (_: Exception) {
         }
+    }
+
+    fun exportJson(): String = runCatching { if (file.exists()) file.readText() else "" }.getOrDefault("")
+
+    fun clear() {
+        runCatching { if (file.exists()) file.delete() }
+        runCatching { if (legacyCacheFile.exists()) legacyCacheFile.delete() }
     }
 }

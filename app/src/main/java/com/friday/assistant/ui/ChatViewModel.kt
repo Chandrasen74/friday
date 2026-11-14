@@ -38,6 +38,7 @@ data class ChatUiState(
 }
 
 class ChatViewModel(application: Application) : AndroidViewModel(application) {
+    private val appPrefs = application.applicationContext.getSharedPreferences("friday_prefs", Application.MODE_PRIVATE)
     private val localService = LiteRtLmService(application.applicationContext)
     private val apiService = ApiInferenceService(application.applicationContext)
     private val chatStore = ChatStore(application.applicationContext)
@@ -48,6 +49,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     init {
         val savedApi = apiService.loadConfig()
+        val savedMode = runCatching { InferenceMode.valueOf(appPrefs.getString("inference_mode", InferenceMode.LOCAL.name) ?: InferenceMode.LOCAL.name) }
+            .getOrDefault(InferenceMode.LOCAL)
+        val savedPathPref = appPrefs.getString("model_path", "") ?: ""
+        val savedUseGpu = appPrefs.getBoolean("use_gpu", false)
         val (savedSessions, savedActiveId) = chatStore.load()
         val sessions = if (savedSessions.isNotEmpty()) {
             savedSessions.map { s -> s.copy(messages = s.messages.map { it.copy(isStreaming = false) }) }
@@ -69,18 +74,22 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             sessions = sessions,
             activeSessionId = activeId,
             modelStatus = ModelStatus(statusText = "Preparing bundled model..."),
-            apiConfig = savedApi
+            apiConfig = savedApi,
+            inferenceMode = savedMode,
+            modelPathInput = savedPathPref,
+            useGpu = savedUseGpu
         )
         viewModelScope.launch {
             val discovered = LiteRtLmService.discoverDefaultModelPath(getApplication<Application>().applicationContext).orEmpty()
-            _uiState.update { it.copy(modelPathInput = discovered) }
-            if (discovered.isNotBlank()) {
-                _uiState.update { it.copy(modelStatus = localService.currentStatus(configuredPath = discovered, loading = true)) }
-                val result = localService.loadModel(discovered, _uiState.value.useGpu)
+            val chosen = savedPathPref.ifBlank { discovered }
+            _uiState.update { it.copy(modelPathInput = chosen) }
+            if (chosen.isNotBlank()) {
+                _uiState.update { it.copy(modelStatus = localService.currentStatus(configuredPath = chosen, loading = true)) }
+                val result = localService.loadModel(chosen, savedUseGpu)
                 _uiState.update { state ->
                     state.copy(
                         modelStatus = result.getOrElse { e ->
-                            localService.currentStatus(configuredPath = discovered, error = e.message ?: "Failed to load model")
+                            localService.currentStatus(configuredPath = chosen, error = e.message ?: "Failed to load model")
                         }
                     )
                 }
@@ -92,13 +101,23 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     fun onInputChange(value: String) { _uiState.update { it.copy(input = value) } }
     fun toggleSettings(open: Boolean) { _uiState.update { it.copy(settingsOpen = open) } }
-    fun onModelPathChange(value: String) { _uiState.update { it.copy(modelPathInput = value) } }
-    fun onUseGpuChange(value: Boolean) { _uiState.update { it.copy(useGpu = value) } }
 
-    fun onInferenceModeChange(mode: InferenceMode) { _uiState.update { it.copy(inferenceMode = mode) } }
+    fun onInferenceModeChange(mode: InferenceMode) {
+        _uiState.update { it.copy(inferenceMode = mode) }
+        appPrefs.edit().putString("inference_mode", mode.name).apply()
+    }
     fun onApiBaseUrlChange(value: String) { updateApi { it.copy(baseUrl = value) } }
     fun onApiKeyChange(value: String) { updateApi { it.copy(apiKey = value) } }
     fun onApiModelChange(value: String) { updateApi { it.copy(model = value) } }
+
+    fun onModelPathChange(value: String) {
+        _uiState.update { it.copy(modelPathInput = value) }
+        appPrefs.edit().putString("model_path", value).apply()
+    }
+    fun onUseGpuChange(value: Boolean) {
+        _uiState.update { it.copy(useGpu = value) }
+        appPrefs.edit().putBoolean("use_gpu", value).apply()
+    }
 
     private fun updateApi(transform: (ApiEndpointConfig) -> ApiEndpointConfig) {
         _uiState.update { state ->
@@ -173,6 +192,78 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun stopGeneration() {
+        generationJob?.cancel()
+        generationJob = null
+        _uiState.update { state ->
+            state.copy(
+                isGenerating = false,
+                sessions = state.sessions.map { session ->
+                    if (session.id == state.activeSessionId) {
+                        session.copy(
+                            messages = session.messages.map { m ->
+                                if (m.isStreaming) m.copy(isStreaming = false, content = m.content.ifBlank { "(stopped)" }) else m
+                            },
+                            updatedAt = System.currentTimeMillis()
+                        )
+                    } else session
+                }
+            )
+        }
+        persistChats()
+    }
+
+    fun regenerateLastResponse() {
+        if (_uiState.value.isGenerating) return
+        val session = _uiState.value.activeSession
+        val lastAssistantIdx = session.messages.indexOfLast { it.role == ChatRole.ASSISTANT }
+        val lastUserIdx = session.messages.indexOfLast { it.role == ChatRole.USER }
+        if (lastAssistantIdx == -1 || lastUserIdx == -1 || lastUserIdx > lastAssistantIdx) return
+        val prompt = session.messages[lastUserIdx].content
+        val trimmed = session.messages.take(lastUserIdx + 1)
+        val assistantId = java.util.UUID.randomUUID().toString()
+        val placeholder = ChatMessage(id = assistantId, role = ChatRole.ASSISTANT, content = "", isStreaming = true)
+        _uiState.update { state ->
+            state.copy(
+                isGenerating = true,
+                sessions = state.sessions.map { s ->
+                    if (s.id == session.id) s.copy(messages = trimmed + placeholder, updatedAt = System.currentTimeMillis()) else s
+                }
+            )
+        }
+        startGeneration(session.id, prompt, trimmed, assistantId)
+    }
+
+    fun renameSession(sessionId: String, title: String) {
+        val t = title.trim().ifBlank { "New session" }
+        _uiState.update { state ->
+            state.copy(sessions = state.sessions.map { s -> if (s.id == sessionId) s.copy(title = t, updatedAt = System.currentTimeMillis()) else s })
+        }
+        persistChats()
+    }
+
+    fun clearCurrentSession() {
+        val sessionId = _uiState.value.activeSessionId
+        _uiState.update { state ->
+            state.copy(sessions = state.sessions.map { s ->
+                if (s.id == sessionId) s.copy(
+                    title = "New session",
+                    messages = listOf(ChatMessage(role = ChatRole.ASSISTANT, content = "Chat cleared. How can I help?")),
+                    updatedAt = System.currentTimeMillis()
+                ) else s
+            })
+        }
+        persistChats()
+    }
+
+    fun clearAllChats() {
+        val fresh = ChatSession(title = "New session", messages = listOf(ChatMessage(role = ChatRole.ASSISTANT, content = "Hi, I'm FRIDAY. How can I help?")))
+        _uiState.update { it.copy(sessions = listOf(fresh), activeSessionId = fresh.id, input = "") }
+        viewModelScope.launch(Dispatchers.IO) { chatStore.clear(); chatStore.save(_uiState.value.sessions, _uiState.value.activeSessionId) }
+    }
+
+    fun exportChatsJson(): String = chatStore.exportJson()
+
     fun sendMessage() {
         val prompt = _uiState.value.input.trim()
         if (prompt.isBlank() || _uiState.value.isGenerating) return
@@ -201,6 +292,16 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             )
         }
 
+        startGeneration(sessionId, prompt, history, assistantId)
+        persistChats() // save user message/placeholder immediately
+    }
+
+    private fun isValidEndpointUrl(url: String): Boolean {
+        val u = url.trim()
+        return (u.startsWith("http://") || u.startsWith("https://")) && u.length > 10
+    }
+
+    private fun startGeneration(sessionId: String, prompt: String, history: List<ChatMessage>, assistantId: String) {
         generationJob = viewModelScope.launch {
             val mode = _uiState.value.inferenceMode
             val apiConfig = _uiState.value.apiConfig
@@ -210,6 +311,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     mode == InferenceMode.REMOTE_API -> {
                         if (!apiConfig.isConfigured) {
                             appendToAssistant(sessionId, assistantId, "Remote API mode is selected but no endpoint is configured. Open Settings and add an API base URL (and optional key/model).", done = true, error = true)
+                        } else if (!isValidEndpointUrl(apiConfig.baseUrl)) {
+                            appendToAssistant(sessionId, assistantId, "Remote API endpoint URL looks invalid. Use a full http(s) URL (e.g. https://api.example.com/v1).", done = true, error = true)
                         } else {
                             val reply = apiService.generateReply(prompt, history, apiConfig)
                             appendToAssistant(sessionId, assistantId, reply.ifBlank { "(empty response)" }, done = true, error = false)
@@ -235,6 +338,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                         appendToAssistant(sessionId, assistantId, fallback, done = true, error = false)
                     }
                 }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                appendToAssistant(sessionId, assistantId, _uiState.value.sessions.flatMap { it.messages }.firstOrNull { it.id == assistantId }?.content?.ifBlank { "(stopped)" } ?: "(stopped)", done = true, error = false)
             } catch (e: Exception) {
                 val msg = "Error: ${e.message ?: "generation failed"}"
                 appendToAssistant(sessionId, assistantId, msg, done = true, error = true)
@@ -243,7 +348,6 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 persistChats()
             }
         }
-        persistChats() // save user message/placeholder immediately
     }
 
     private fun appendToAssistant(sessionId: String, messageId: String, content: String, done: Boolean, error: Boolean) {
@@ -290,3 +394,4 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         super.onCleared()
     }
 }
+
