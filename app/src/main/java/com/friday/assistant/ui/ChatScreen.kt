@@ -1,4 +1,4 @@
-﻿package com.friday.assistant.ui
+package com.friday.assistant.ui
 
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
@@ -47,6 +47,7 @@ import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SmartToy
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -62,10 +63,12 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -223,6 +226,26 @@ private fun DrawerContent(
     onDeleteSession: (String) -> Unit,
     onOpenSettings: () -> Unit
 ) {
+    var sessionPendingDelete by rememberSaveable { mutableStateOf<String?>(null) }
+    val pending = sessionPendingDelete?.let { id -> state.sessions.firstOrNull { it.id == id } }
+    if (pending != null) {
+        AlertDialog(
+            onDismissRequest = { sessionPendingDelete = null },
+            title = { Text("Delete chat?") },
+            text = { Text("Delete \"${pending.title}\"? This cannot be undone.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    val id = pending.id
+                    sessionPendingDelete = null
+                    onDeleteSession(id)
+                }) { Text("Delete") }
+            },
+            dismissButton = {
+                TextButton(onClick = { sessionPendingDelete = null }) { Text("Cancel") }
+            }
+        )
+    }
+
     Column(
         modifier = Modifier
             .fillMaxHeight()
@@ -274,7 +297,7 @@ private fun DrawerContent(
                     session = session,
                     selected = session.id == state.activeSessionId,
                     onSelect = { onSelectSession(session.id) },
-                    onDelete = { onDeleteSession(session.id) }
+                    onDelete = { sessionPendingDelete = session.id }
                 )
             }
         }
@@ -328,12 +351,11 @@ private fun SessionRow(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
-        IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {
+        IconButton(onClick = onDelete) {
             Icon(
                 Icons.Default.DeleteOutline,
-                contentDescription = "Delete",
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(18.dp)
+                contentDescription = "Delete session",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }
@@ -379,14 +401,39 @@ private fun ChatScreen(
     onEditMessage: (String) -> Unit
 ) {
     val session = state.activeSession
-    val listState = rememberLazyListState()
+    val listState = remember(session?.id) { androidx.compose.foundation.lazy.LazyListState() }
     val messages = session?.messages.orEmpty()
     val clipboard = LocalClipboardManager.current
     val context = LocalContext.current
+    val isNearBottom by remember {
+        derivedStateOf {
+            val layout = listState.layoutInfo
+            val lastVisible = layout.visibleItemsInfo.lastOrNull()?.index ?: -1
+            val total = layout.totalItemsCount
+            total == 0 || lastVisible >= total - 2
+        }
+    }
+    var prevMessageCount by remember(session?.id) { mutableStateOf(messages.size) }
 
-    LaunchedEffect(session?.id, messages.size, messages.lastOrNull()?.content) {
+    LaunchedEffect(session?.id) {
         if (messages.isNotEmpty()) {
+            listState.scrollToItem(messages.lastIndex)
+        }
+        prevMessageCount = messages.size
+    }
+
+    LaunchedEffect(messages.size) {
+        if (messages.isEmpty()) {
+            prevMessageCount = 0
+        } else if (messages.size != prevMessageCount) {
             listState.animateScrollToItem(messages.lastIndex)
+            prevMessageCount = messages.size
+        }
+    }
+
+    LaunchedEffect(messages.lastOrNull()?.id, messages.lastOrNull()?.content, messages.lastOrNull()?.isStreaming) {
+        if (messages.isNotEmpty() && isNearBottom) {
+            listState.scrollToItem(messages.lastIndex)
         }
     }
 
@@ -422,7 +469,7 @@ private fun ChatScreen(
                             else -> "Local fallback"
                         }
                         Text(
-                            text = "$mode • ${formatMetrics(state.metrics, state.isGenerating)}",
+                            text = "$mode ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ ${formatMetrics(state.metrics, state.isGenerating)}",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 2,
@@ -430,7 +477,7 @@ private fun ChatScreen(
                         )
                     }
                     if (session != null) {
-                        IconButton(onClick = onRegenerate, enabled = !state.isGenerating) {
+                        IconButton(onClick = onRegenerate, enabled = !state.isGenerating && !state.isMemoryBusy) {
                             Icon(Icons.Default.Refresh, contentDescription = "Regenerate", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
@@ -582,7 +629,7 @@ private fun MessageRow(message: ChatMessage, onCopy: () -> Unit, onEdit: (() -> 
                 Spacer(Modifier.height(4.dp))
             } else if (onEdit != null) {
                 Text(
-                    text = "Tap to edit & resend â€¢ long press to copy",
+                    text = "Tap to edit and resend, long press to copy",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -603,7 +650,7 @@ private fun MessageRow(message: ChatMessage, onCopy: () -> Unit, onEdit: (() -> 
             }
             if (message.isStreaming && message.content.isNotBlank()) {
                 Spacer(Modifier.height(4.dp))
-                Text("â— streaming", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Streaming...", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
@@ -619,7 +666,7 @@ private fun formatMetrics(m: GenerationMetrics, generating: Boolean): String {
     val chunks = if (m.chunkCount > 0) "${m.chunkCount} chunks" else null
     val model = m.modelName.takeIf { it.isNotBlank() }
     val parts = listOfNotNull(if (generating) "generating" else null, model, ttft, total, tps, cps, out, chunks)
-    return if (parts.isEmpty()) "ready" else parts.joinToString(" â€¢ ")
+    return if (parts.isEmpty()) "ready" else parts.joinToString(" ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ ")
 }
 
 @Composable
@@ -789,9 +836,9 @@ private fun SettingsScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                item { SettingsTextField("Endpoint URL", state.apiConfig.baseUrl, "https://api.example.com/v1", onApiBaseUrlChange) }
-                item { SettingsTextField("API key (optional)", state.apiConfig.apiKey, "sk-...", onApiKeyChange, masked = true) }
-                item { SettingsTextField("Model (optional)", state.apiConfig.model, "gpt-4o-mini / model-name", onApiModelChange) }
+                item { SettingsTextField("Endpoint URL", state.apiConfig.baseUrl, "https://api.example.com/v1", onApiBaseUrlChange, singleLine = true) }
+                item { SettingsTextField("API key (optional)", state.apiConfig.apiKey, "sk-...", onApiKeyChange, masked = true, singleLine = true) }
+                item { SettingsTextField("Model (optional)", state.apiConfig.model, "gpt-4o-mini / model-name", onApiModelChange, singleLine = true) }
                 item {
                     val status = if (state.apiConfig.isConfigured) "Endpoint configured and will be used for chat." else "No endpoint configured. Add a URL to use Remote API."
                     Text(status, style = MaterialTheme.typography.bodySmall, color = if (state.apiConfig.isConfigured) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error)
@@ -819,7 +866,7 @@ private fun SettingsScreen(
                     )
                 }
                 item { StatusPill(status = state.modelStatus) }
-                item { SettingsTextField("Model path", state.modelPathInput, "/storage/.../models/model.litertlm", onPathChange, mono = true) }
+                item { SettingsTextField("Model path", state.modelPathInput, "/storage/.../models/model.litertlm", onPathChange, mono = true, singleLine = true) }
                 item {
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         ActionButton(text = if (state.modelStatus.isLoading) "Loading..." else "Load model", primary = true, enabled = !state.modelStatus.isLoading, onClick = onLoad)
@@ -830,7 +877,7 @@ private fun SettingsScreen(
                 item {
                     Text("Model manager", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurface)
                     Spacer(Modifier.height(6.dp))
-                    SettingsTextField("Download model URL (.litertlm)", state.modelDownloadUrl, "https://.../model.litertlm", onModelDownloadUrlChange, mono = true)
+                    SettingsTextField("Download model URL (.litertlm)", state.modelDownloadUrl, "https://.../model.litertlm", onModelDownloadUrlChange, mono = true, singleLine = true)
                     Spacer(Modifier.height(8.dp))
                     ActionButton("Download model", primary = true, enabled = state.modelDownloadUrl.isNotBlank()) { onDownloadModel() }
                     state.busyMessage?.let {
@@ -924,10 +971,27 @@ private fun PersonaMemoryScreen(
     onExtractMemories: () -> Unit
 ) {
     val context = LocalContext.current
-    var newMemoryText by remember { mutableStateOf("") }
-    var editingMemoryId by remember { mutableStateOf<String?>(null) }
-    var editingMemoryText by remember { mutableStateOf("") }
+    var newMemoryText by rememberSaveable { mutableStateOf("") }
+    var editingMemoryId by rememberSaveable { mutableStateOf<String?>(null) }
+    var editingMemoryText by rememberSaveable { mutableStateOf("") }
+    var personaDraft by rememberSaveable(state.personaConfig.systemPrompt) { mutableStateOf(state.personaConfig.systemPrompt) }
+    var showClearMemoriesDialog by rememberSaveable { mutableStateOf(false) }
 
+    if (showClearMemoriesDialog) {
+        AlertDialog(
+            onDismissRequest = { showClearMemoriesDialog = false },
+            title = { Text("Clear all memories?") },
+            text = { Text("This will permanently delete all saved memories.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showClearMemoriesDialog = false
+                    onClearMemories()
+                    Toast.makeText(context, "Memories cleared", Toast.LENGTH_SHORT).show()
+                }) { Text("Clear all") }
+            },
+            dismissButton = { TextButton(onClick = { showClearMemoriesDialog = false }) { Text("Cancel") } }
+        )
+    }
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
@@ -971,13 +1035,19 @@ private fun PersonaMemoryScreen(
                 Spacer(Modifier.height(8.dp))
                 SettingsTextField(
                     label = "System prompt",
-                    value = state.personaConfig.systemPrompt,
+                    value = personaDraft,
                     placeholder = PersonaConfig.DEFAULT_PERSONA_PROMPT,
-                    onChange = onPersonaPromptChange
+                    onChange = { personaDraft = it },
+                    minLines = 3,
+                    maxLines = 10
                 )
                 Spacer(Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    ActionButton("Reset to default", primary = false, enabled = state.personaConfig.systemPrompt != PersonaConfig.DEFAULT_PERSONA_PROMPT) {
+                    ActionButton("Save prompt", primary = true, enabled = personaDraft != state.personaConfig.systemPrompt) {
+                        onPersonaPromptChange(personaDraft)
+                        Toast.makeText(context, "Persona prompt saved", Toast.LENGTH_SHORT).show()
+                    }
+                    ActionButton("Reset to default", primary = false, enabled = personaDraft != PersonaConfig.DEFAULT_PERSONA_PROMPT) {
                         onResetPersonaPrompt()
                         Toast.makeText(context, "Persona reset to default", Toast.LENGTH_SHORT).show()
                     }
@@ -1016,8 +1086,7 @@ private fun PersonaMemoryScreen(
                         enabled = !state.isMemoryBusy && !state.isGenerating
                     ) { onExtractMemories() }
                     ActionButton("Clear all memories", primary = false, enabled = state.memories.isNotEmpty() && !state.isMemoryBusy) {
-                        onClearMemories()
-                        Toast.makeText(context, "Memories cleared", Toast.LENGTH_SHORT).show()
+                        showClearMemoriesDialog = true
                     }
                 }
                 state.memoryBusyMessage?.let {
@@ -1121,18 +1190,60 @@ private fun ChatsStorageScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val activeSession = state.activeSession
-    var renameText by remember(activeSession?.id, activeSession?.title) { mutableStateOf(activeSession?.title ?: "") }
+    var renameText by rememberSaveable(activeSession?.id) { mutableStateOf(activeSession?.title ?: "") }
+    var showClearCurrentDialog by rememberSaveable { mutableStateOf(false) }
+    var showClearAllDialog by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(activeSession?.id, activeSession?.title) {
+        if (renameText.isBlank() || renameText != (activeSession?.title ?: "")) {
+            renameText = activeSession?.title ?: ""
+        }
+    }
     val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
         scope.launch {
             val text = withContext(Dispatchers.IO) {
                 runCatching {
-                    context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+                    context.contentResolver.openInputStream(uri)?.use { input ->
+                        val maxBytes = 10L * 1024L * 1024L
+                        val bytes = input.readBytes()
+                        if (bytes.size.toLong() > maxBytes) null else bytes.toString(Charsets.UTF_8)
+                    }
                 }.getOrNull()
             }
             val ok = !text.isNullOrBlank() && onImportChats(text)
-            Toast.makeText(context, if (ok) "Chats imported" else "Import failed (invalid JSON file)", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, if (ok) "Chats imported" else "Import failed (invalid, empty, or too large file)", Toast.LENGTH_SHORT).show()
         }
+    }
+
+    if (showClearCurrentDialog) {
+        AlertDialog(
+            onDismissRequest = { showClearCurrentDialog = false },
+            title = { Text("Clear current chat?") },
+            text = { Text("This will remove messages in the current chat session. This cannot be undone.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showClearCurrentDialog = false
+                    onClearCurrentChat()
+                    Toast.makeText(context, "Current chat cleared", Toast.LENGTH_SHORT).show()
+                }) { Text("Clear") }
+            },
+            dismissButton = { TextButton(onClick = { showClearCurrentDialog = false }) { Text("Cancel") } }
+        )
+    }
+    if (showClearAllDialog) {
+        AlertDialog(
+            onDismissRequest = { showClearAllDialog = false },
+            title = { Text("Clear all chats?") },
+            text = { Text("This will delete all saved chat sessions. This cannot be undone.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showClearAllDialog = false
+                    onClearAllChats()
+                    Toast.makeText(context, "All chats cleared", Toast.LENGTH_SHORT).show()
+                }) { Text("Clear all") }
+            },
+            dismissButton = { TextButton(onClick = { showClearAllDialog = false }) { Text("Cancel") } }
+        )
     }
 
     Scaffold(
@@ -1174,7 +1285,7 @@ private fun ChatsStorageScreen(
             }
             item {
                 if (activeSession != null) {
-                    SettingsTextField("Rename current session", renameText, "Session title", { renameText = it })
+                    SettingsTextField("Rename current session", renameText, "Session title", { renameText = it }, singleLine = true)
                     Spacer(Modifier.height(8.dp))
                     ActionButton("Save title", primary = true, enabled = renameText.isNotBlank()) {
                         onRenameSession(activeSession.id, renameText)
@@ -1187,12 +1298,10 @@ private fun ChatsStorageScreen(
             item {
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     ActionButton("Clear current chat", primary = false, enabled = activeSession != null) {
-                        onClearCurrentChat()
-                        Toast.makeText(context, "Current chat cleared", Toast.LENGTH_SHORT).show()
+                        showClearCurrentDialog = true
                     }
                     ActionButton("Clear all chats", primary = false, enabled = state.sessions.isNotEmpty()) {
-                        onClearAllChats()
-                        Toast.makeText(context, "All chats cleared", Toast.LENGTH_SHORT).show()
+                        showClearAllDialog = true
                     }
                 }
                 Spacer(Modifier.height(10.dp))
@@ -1232,7 +1341,17 @@ private fun ModeChip(text: String, selected: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
-private fun SettingsTextField(label: String, value: String, placeholder: String, onChange: (String) -> Unit, mono: Boolean = false, masked: Boolean = false) {
+private fun SettingsTextField(
+    label: String,
+    value: String,
+    placeholder: String,
+    onChange: (String) -> Unit,
+    mono: Boolean = false,
+    masked: Boolean = false,
+    singleLine: Boolean = false,
+    minLines: Int = 1,
+    maxLines: Int = if (singleLine) 1 else 6
+) {
     Text(label, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
     Spacer(Modifier.height(6.dp))
     Box(
@@ -1244,11 +1363,20 @@ private fun SettingsTextField(label: String, value: String, placeholder: String,
             .padding(12.dp)
     ) {
         if (value.isBlank()) {
-            Text(placeholder, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+            Text(
+                placeholder,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall,
+                maxLines = if (singleLine) 1 else 2,
+                overflow = TextOverflow.Ellipsis
+            )
         }
         BasicTextField(
             value = value,
             onValueChange = onChange,
+            singleLine = singleLine,
+            minLines = minLines,
+            maxLines = maxLines,
             textStyle = TextStyle(
                 color = MaterialTheme.colorScheme.onSurface,
                 fontSize = 13.sp,
