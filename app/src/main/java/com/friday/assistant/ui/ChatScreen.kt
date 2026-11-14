@@ -1,6 +1,7 @@
 ﻿package com.friday.assistant.ui
 
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -111,6 +112,15 @@ fun FridayApp(viewModel: ChatViewModel) {
     val scope = rememberCoroutineScope()
     val keyboardController = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
+
+    BackHandler(enabled = drawerState.isOpen || state.settingsOpen || state.chatsStorageOpen || state.personaMemoryOpen) {
+        when {
+            drawerState.isOpen -> scope.launch { drawerState.close() }
+            state.settingsOpen && state.personaMemoryOpen -> viewModel.openPersonaMemory(false)
+            state.settingsOpen && state.chatsStorageOpen -> viewModel.openChatsStorage(false)
+            state.settingsOpen -> viewModel.toggleSettings(false)
+        }
+    }
 
     ModalNavigationDrawer(
         drawerState = drawerState,
