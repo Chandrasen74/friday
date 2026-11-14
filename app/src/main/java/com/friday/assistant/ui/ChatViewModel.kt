@@ -24,7 +24,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 data class ChatUiState(
-    val sessions: List<ChatSession> = listOf(ChatSession()),
+    val sessions: List<ChatSession> = emptyList(),
     val activeSessionId: String = "",
     val input: String = "",
     val isGenerating: Boolean = false,
@@ -42,8 +42,8 @@ data class ChatUiState(
     val busyMessage: String? = null,
     val apiTestMessage: String? = null
 ) {
-    val activeSession: ChatSession
-        get() = sessions.firstOrNull { it.id == activeSessionId } ?: sessions.first()
+    val activeSession: ChatSession?
+        get() = sessions.firstOrNull { it.id == activeSessionId } ?: sessions.firstOrNull()
 }
 
 class ChatViewModel(application: Application) : AndroidViewModel(application) {
@@ -66,19 +66,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         val sessions = if (savedSessions.isNotEmpty()) {
             savedSessions.map { s -> s.copy(messages = s.messages.map { it.copy(isStreaming = false) }) }
         } else {
-            listOf(
-                ChatSession(
-                    title = "New session",
-                    messages = listOf(
-                        ChatMessage(
-                            role = ChatRole.ASSISTANT,
-                            content = "Hi, I'm FRIDAY. I can run on-device with LiteRT-LM or use a remote API endpoint you configure in Settings."
-                        )
-                    )
-                )
-            )
+            emptyList()
         }
-        val activeId = sessions.firstOrNull { it.id == savedActiveId }?.id ?: sessions.first().id
+        val activeId = sessions.firstOrNull { it.id == savedActiveId }?.id ?: sessions.firstOrNull()?.id.orEmpty()
         _uiState.value = ChatUiState(
             sessions = sessions,
             activeSessionId = activeId,
@@ -205,8 +195,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.update { state ->
             val remaining = state.sessions.filterNot { it.id == id }
             if (remaining.isEmpty()) {
-                val fresh = ChatSession()
-                state.copy(sessions = listOf(fresh), activeSessionId = fresh.id, editingMessageId = null)
+                state.copy(sessions = emptyList(), activeSessionId = "", editingMessageId = null, input = "")
             } else {
                 val active = if (state.activeSessionId == id) remaining.first().id else state.activeSessionId
                 state.copy(sessions = remaining, activeSessionId = active, editingMessageId = if (state.activeSessionId == id) null else state.editingMessageId)
@@ -265,7 +254,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     fun regenerateLastResponse() {
         if (_uiState.value.isGenerating) return
         generationJob?.cancel()
-        val session = _uiState.value.activeSession
+        val session = _uiState.value.activeSession ?: return
         val lastAssistantIdx = session.messages.indexOfLast { it.role == ChatRole.ASSISTANT }
         val lastUserIdx = session.messages.indexOfLast { it.role == ChatRole.USER }
         if (lastAssistantIdx == -1 || lastUserIdx == -1 || lastUserIdx > lastAssistantIdx) return
@@ -310,12 +299,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     fun clearAllChats() {
         if (_uiState.value.isGenerating) stopGeneration()
-        val fresh = ChatSession(title = "New session", messages = listOf(ChatMessage(role = ChatRole.ASSISTANT, content = "Hi, I'm FRIDAY. How can I help?")))
-        _uiState.update { it.copy(sessions = listOf(fresh), activeSessionId = fresh.id, input = "", editingMessageId = null) }
+        _uiState.update { it.copy(sessions = emptyList(), activeSessionId = "", input = "", editingMessageId = null) }
         viewModelScope.launch(Dispatchers.IO) {
             persistMutex.withLock {
                 chatStore.clear()
-                chatStore.save(listOf(fresh), fresh.id)
             }
         }
     }
@@ -333,7 +320,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun startEditMessage(messageId: String) {
-        val msg = _uiState.value.activeSession.messages.firstOrNull { it.id == messageId && it.role == ChatRole.USER } ?: return
+        val session = _uiState.value.activeSession ?: return
+        val msg = session.messages.firstOrNull { it.id == messageId && it.role == ChatRole.USER } ?: return
         _uiState.update { it.copy(input = msg.content, editingMessageId = messageId) }
     }
 
@@ -346,9 +334,18 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         if (prompt.isBlank() || _uiState.value.isGenerating) return
         generationJob?.cancel()
 
-        val stateNow = _uiState.value
-        val sessionId = stateNow.activeSessionId
-        val session = stateNow.activeSession
+        var stateNow = _uiState.value
+        var session = stateNow.activeSession
+        if (session == null) {
+            val created = ChatSession(
+                title = "New session",
+                messages = listOf(ChatMessage(role = ChatRole.ASSISTANT, content = "New session started. How can I help?"))
+            )
+            _uiState.update { it.copy(sessions = listOf(created), activeSessionId = created.id) }
+            stateNow = _uiState.value
+            session = stateNow.activeSession ?: return
+        }
+        val sessionId = stateNow.activeSessionId.ifBlank { session.id }
         val editingId = stateNow.editingMessageId
         val assistantId = java.util.UUID.randomUUID().toString()
         val placeholder = ChatMessage(id = assistantId, role = ChatRole.ASSISTANT, content = "", isStreaming = true)
