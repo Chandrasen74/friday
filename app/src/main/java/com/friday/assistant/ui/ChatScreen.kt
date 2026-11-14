@@ -1,8 +1,11 @@
 package com.friday.assistant.ui
 
+import android.widget.Toast
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -31,8 +34,11 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material3.DrawerValue
@@ -51,11 +57,17 @@ import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -114,7 +126,11 @@ fun FridayApp(viewModel: ChatViewModel) {
                 onInferenceModeChange = viewModel::onInferenceModeChange,
                 onApiBaseUrlChange = viewModel::onApiBaseUrlChange,
                 onApiKeyChange = viewModel::onApiKeyChange,
-                onApiModelChange = viewModel::onApiModelChange
+                onApiModelChange = viewModel::onApiModelChange,
+                onClearCurrentChat = viewModel::clearCurrentSession,
+                onClearAllChats = viewModel::clearAllChats,
+                onExportChats = viewModel::exportChatsJson,
+                onRenameSession = viewModel::renameSession
             )
         } else {
             ChatScreen(
@@ -123,7 +139,9 @@ fun FridayApp(viewModel: ChatViewModel) {
                 onNew = { viewModel.newSession() },
                 onSettings = { viewModel.toggleSettings(true) },
                 onInputChange = viewModel::onInputChange,
-                onSend = viewModel::sendMessage
+                onSend = viewModel::sendMessage,
+                onStop = viewModel::stopGeneration,
+                onRegenerate = viewModel::regenerateLastResponse
             )
         }
     }
@@ -279,10 +297,14 @@ private fun ChatScreen(
     onNew: () -> Unit,
     onSettings: () -> Unit,
     onInputChange: (String) -> Unit,
-    onSend: () -> Unit
+    onSend: () -> Unit,
+    onStop: () -> Unit,
+    onRegenerate: () -> Unit
 ) {
     val listState = rememberLazyListState()
     val messages = state.activeSession.messages
+    val clipboard = LocalClipboardManager.current
+    val context = LocalContext.current
 
     LaunchedEffect(messages.size, messages.lastOrNull()?.content) {
         if (messages.isNotEmpty()) {
@@ -323,6 +345,9 @@ private fun ChatScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
+                    IconButton(onClick = onRegenerate, enabled = !state.isGenerating) {
+                        Icon(Icons.Default.Refresh, contentDescription = "Regenerate", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                     IconButton(onClick = onNew) {
                         Icon(Icons.Default.Add, contentDescription = "New", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
@@ -336,9 +361,10 @@ private fun ChatScreen(
         bottomBar = {
             ComposerBar(
                 value = state.input,
-                enabled = !state.isGenerating,
+                isGenerating = state.isGenerating,
                 onValueChange = onInputChange,
-                onSend = onSend
+                onSend = onSend,
+                onStop = onStop
             )
         }
     ) { padding ->
@@ -352,15 +378,22 @@ private fun ChatScreen(
         ) {
             item { Spacer(Modifier.height(8.dp)) }
             items(messages, key = { it.id }) { msg ->
-                MessageRow(message = msg)
+                MessageRow(
+                    message = msg,
+                    onCopy = {
+                        clipboard.setText(AnnotatedString(msg.content))
+                        Toast.makeText(context, "Copied", Toast.LENGTH_SHORT).show()
+                    }
+                )
             }
             item { Spacer(Modifier.height(12.dp)) }
         }
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun MessageRow(message: ChatMessage) {
+private fun MessageRow(message: ChatMessage, onCopy: () -> Unit) {
     val isUser = message.role == ChatRole.USER
     Row(
         modifier = Modifier
@@ -399,14 +432,26 @@ private fun MessageRow(message: ChatMessage) {
                 .clip(RoundedCornerShape(14.dp))
                 .background(bg)
                 .border(1.dp, border, RoundedCornerShape(14.dp))
+                .combinedClickable(onClick = {}, onLongClick = onCopy)
                 .padding(horizontal = 12.dp, vertical = 10.dp)
         ) {
             if (!isUser) {
-                Text(
-                    text = "FRIDAY",
-                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        text = "FRIDAY",
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f)
+                    )
+                    if (message.content.isNotBlank() && !message.isStreaming) {
+                        Icon(
+                            Icons.Default.ContentCopy,
+                            contentDescription = "Copy",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(14.dp).clickable { onCopy() }
+                        )
+                    }
+                }
                 Spacer(Modifier.height(4.dp))
             }
             Text(
@@ -415,7 +460,7 @@ private fun MessageRow(message: ChatMessage) {
                 style = TextStyle(
                     fontSize = 14.sp,
                     lineHeight = 20.sp,
-                    fontFamily = if (!isUser && message.content.contains("```")) FontFamily.Monospace else FontFamily.Default
+                    fontFamily = if (!isUser && (message.content.contains("```") || message.content.contains("\n    "))) FontFamily.Monospace else FontFamily.Default
                 )
             )
             if (message.isStreaming && message.content.isNotBlank()) {
@@ -429,9 +474,10 @@ private fun MessageRow(message: ChatMessage) {
 @Composable
 private fun ComposerBar(
     value: String,
-    enabled: Boolean,
+    isGenerating: Boolean,
     onValueChange: (String) -> Unit,
-    onSend: () -> Unit
+    onSend: () -> Unit,
+    onStop: () -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -457,7 +503,7 @@ private fun ComposerBar(
             ) {
                 if (value.isBlank()) {
                     Text(
-                        text = "Message FRIDAY...",
+                        text = if (isGenerating) "Generating..." else "Message FRIDAY...",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.bodyMedium
                     )
@@ -465,7 +511,7 @@ private fun ComposerBar(
                 BasicTextField(
                     value = value,
                     onValueChange = onValueChange,
-                    enabled = enabled,
+                    enabled = !isGenerating,
                     textStyle = TextStyle(color = MaterialTheme.colorScheme.onSurface, fontSize = 14.sp, lineHeight = 20.sp),
                     cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                     modifier = Modifier.fillMaxWidth(),
@@ -473,21 +519,39 @@ private fun ComposerBar(
                 )
             }
             Spacer(Modifier.width(8.dp))
-            val canSend = enabled && value.isNotBlank()
-            Box(
-                modifier = Modifier
-                    .size(44.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(if (canSend) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant)
-                    .clickable(enabled = canSend) { onSend() },
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    Icons.AutoMirrored.Filled.Send,
-                    contentDescription = "Send",
-                    tint = if (canSend) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(20.dp)
-                )
+            if (isGenerating) {
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.error)
+                        .clickable { onStop() },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Default.Close,
+                        contentDescription = "Stop",
+                        tint = MaterialTheme.colorScheme.onError,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            } else {
+                val canSend = value.isNotBlank()
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(if (canSend) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant)
+                        .clickable(enabled = canSend) { onSend() },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.Send,
+                        contentDescription = "Send",
+                        tint = if (canSend) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
             }
         }
     }
@@ -504,8 +568,15 @@ private fun SettingsScreen(
     onInferenceModeChange: (InferenceMode) -> Unit,
     onApiBaseUrlChange: (String) -> Unit,
     onApiKeyChange: (String) -> Unit,
-    onApiModelChange: (String) -> Unit
+    onApiModelChange: (String) -> Unit,
+    onClearCurrentChat: () -> Unit,
+    onClearAllChats: () -> Unit,
+    onExportChats: () -> String,
+    onRenameSession: (String, String) -> Unit
 ) {
+    val clipboard = LocalClipboardManager.current
+    val context = LocalContext.current
+    var renameText by remember(state.activeSession.id, state.activeSession.title) { mutableStateOf(state.activeSession.title) }
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
@@ -622,6 +693,40 @@ private fun SettingsScreen(
                 item {
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                     Text("Remote API settings are hidden while Local mode is active.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+
+            item {
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                Spacer(Modifier.height(4.dp))
+                Text("Chats & storage", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface)
+                Spacer(Modifier.height(6.dp))
+                Text("Chats are saved locally on device (durable app storage) and restored on launch.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            item {
+                SettingsTextField("Rename current session", renameText, "Session title", { renameText = it })
+                Spacer(Modifier.height(8.dp))
+                ActionButton("Save title", primary = true, enabled = renameText.isNotBlank()) {
+                    onRenameSession(state.activeSessionId, renameText)
+                    Toast.makeText(context, "Session renamed", Toast.LENGTH_SHORT).show()
+                }
+            }
+            item {
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    ActionButton("Clear current chat", primary = false, enabled = true) {
+                        onClearCurrentChat()
+                        Toast.makeText(context, "Current chat cleared", Toast.LENGTH_SHORT).show()
+                    }
+                    ActionButton("Clear all chats", primary = false, enabled = true) {
+                        onClearAllChats()
+                        Toast.makeText(context, "All chats cleared", Toast.LENGTH_SHORT).show()
+                    }
+                }
+                Spacer(Modifier.height(10.dp))
+                ActionButton("Copy chats export (JSON)", primary = true, enabled = true) {
+                    val json = onExportChats().ifBlank { "{\"sessions\":[]}" }
+                    clipboard.setText(AnnotatedString(json))
+                    Toast.makeText(context, "Chats JSON copied", Toast.LENGTH_SHORT).show()
                 }
             }
         }
