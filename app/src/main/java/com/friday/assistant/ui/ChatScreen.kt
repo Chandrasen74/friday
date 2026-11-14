@@ -59,9 +59,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.friday.assistant.data.ApiEndpointConfig
 import com.friday.assistant.data.ChatMessage
 import com.friday.assistant.data.ChatRole
 import com.friday.assistant.data.ChatSession
+import com.friday.assistant.data.InferenceMode
 import com.friday.assistant.data.ModelStatus
 import kotlinx.coroutines.launch
 
@@ -104,7 +106,11 @@ fun FridayApp(viewModel: ChatViewModel) {
                 onPathChange = viewModel::onModelPathChange,
                 onGpuChange = viewModel::onUseGpuChange,
                 onLoad = viewModel::loadModel,
-                onUnload = viewModel::unloadModel
+                onUnload = viewModel::unloadModel,
+                onInferenceModeChange = viewModel::onInferenceModeChange,
+                onApiBaseUrlChange = viewModel::onApiBaseUrlChange,
+                onApiKeyChange = viewModel::onApiKeyChange,
+                onApiModelChange = viewModel::onApiModelChange
             )
         } else {
             ChatScreen(
@@ -302,7 +308,12 @@ private fun ChatScreen(
                             overflow = TextOverflow.Ellipsis
                         )
                         Text(
-                            text = if (state.modelStatus.isReady) "LiteRT-LM local" else "Local fallback",
+                            text = when {
+                                state.inferenceMode == InferenceMode.REMOTE_API && state.apiConfig.isConfigured -> "Remote API"
+                                state.inferenceMode == InferenceMode.REMOTE_API -> "Remote API (not configured)"
+                                state.modelStatus.isReady -> "LiteRT-LM local"
+                                else -> "Local fallback"
+                            },
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -484,7 +495,11 @@ private fun SettingsScreen(
     onPathChange: (String) -> Unit,
     onGpuChange: (Boolean) -> Unit,
     onLoad: () -> Unit,
-    onUnload: () -> Unit
+    onUnload: () -> Unit,
+    onInferenceModeChange: (InferenceMode) -> Unit,
+    onApiBaseUrlChange: (String) -> Unit,
+    onApiKeyChange: (String) -> Unit,
+    onApiModelChange: (String) -> Unit
 ) {
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -516,38 +531,52 @@ private fun SettingsScreen(
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             item {
+                Text("Inference mode", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface)
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    ModeChip("Local (LiteRT-LM)", state.inferenceMode == InferenceMode.LOCAL) { onInferenceModeChange(InferenceMode.LOCAL) }
+                    ModeChip("Remote API", state.inferenceMode == InferenceMode.REMOTE_API) { onInferenceModeChange(InferenceMode.REMOTE_API) }
+                }
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    "Use on-device LiteRT-LM or connect to an API endpoint (OpenAI-compatible chat completions).",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            item {
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                Spacer(Modifier.height(4.dp))
+                Text("Remote API endpoint", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface)
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    "Add any API base URL (e.g. https://api.openai.com, http://host:port, or full /v1/chat/completions). API key/model are optional depending on provider.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            item { SettingsTextField("Endpoint URL", state.apiConfig.baseUrl, "https://api.example.com/v1", onApiBaseUrlChange) }
+            item { SettingsTextField("API key (optional)", state.apiConfig.apiKey, "sk-...", onApiKeyChange) }
+            item { SettingsTextField("Model (optional)", state.apiConfig.model, "gpt-4o-mini / model-name", onApiModelChange) }
+            item {
+                val status = if (state.apiConfig.isConfigured) "Endpoint configured" else "No endpoint configured"
+                Text(status, style = MaterialTheme.typography.bodySmall, color = if (state.apiConfig.isConfigured) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+
+            item {
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                Spacer(Modifier.height(4.dp))
                 Text("On-device model (LiteRT-LM)", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface)
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    "Use a .litertlm model (e.g. Gemma from litert-community). Place it in Android/data/com.friday.assistant/files/models/ or app files/models and provide its path.",
+                    "Use a .litertlm model. Bundled model is auto-detected; you can also provide a local path.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
             item { StatusPill(status = state.modelStatus) }
-            item {
-                Text("Model path", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Spacer(Modifier.height(6.dp))
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(MaterialTheme.colorScheme.surface)
-                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(12.dp))
-                        .padding(12.dp)
-                ) {
-                    if (state.modelPathInput.isBlank()) {
-                        Text("/storage/.../models/model.litertlm", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    BasicTextField(
-                        value = state.modelPathInput,
-                        onValueChange = onPathChange,
-                        textStyle = TextStyle(color = MaterialTheme.colorScheme.onSurface, fontSize = 13.sp, fontFamily = FontFamily.Monospace),
-                        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-            }
+            item { SettingsTextField("Model path", state.modelPathInput, "/storage/.../models/model.litertlm", onPathChange, mono = true) }
             item {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -556,7 +585,7 @@ private fun SettingsScreen(
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text("Use GPU backend", color = MaterialTheme.colorScheme.onSurface)
-                        Text("Try GPU for supported models/devices; falls back behavior depends on runtime.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("Try GPU for supported models/devices; behavior depends on runtime.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Switch(checked = state.useGpu, onCheckedChange = onGpuChange)
                 }
@@ -576,18 +605,51 @@ private fun SettingsScreen(
                     Text("Error: $it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
                 }
             }
-            item {
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                Spacer(Modifier.height(8.dp))
-                Text("About this build", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface)
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    "FRIDAY baseline with OpenCode-style chat UI and LiteRT-LM on-device inference integration. Voice, wake word, Room memory, and integrations are planned next milestones.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
         }
+    }
+}
+
+@Composable
+private fun ModeChip(text: String, selected: Boolean, onClick: () -> Unit) {
+    val bg = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
+    val fg = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(999.dp))
+            .background(bg)
+            .clickable { onClick() }
+            .padding(horizontal = 14.dp, vertical = 10.dp)
+    ) {
+        Text(text, color = fg, style = MaterialTheme.typography.labelLarge)
+    }
+}
+
+@Composable
+private fun SettingsTextField(label: String, value: String, placeholder: String, onChange: (String) -> Unit, mono: Boolean = false) {
+    Text(label, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Spacer(Modifier.height(6.dp))
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.surface)
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(12.dp))
+            .padding(12.dp)
+    ) {
+        if (value.isBlank()) {
+            Text(placeholder, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+        }
+        BasicTextField(
+            value = value,
+            onValueChange = onChange,
+            textStyle = TextStyle(
+                color = MaterialTheme.colorScheme.onSurface,
+                fontSize = 13.sp,
+                fontFamily = if (mono) FontFamily.Monospace else FontFamily.Default
+            ),
+            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+            modifier = Modifier.fillMaxWidth()
+        )
     }
 }
 

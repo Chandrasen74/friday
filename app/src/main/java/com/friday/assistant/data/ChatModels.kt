@@ -33,3 +33,16 @@ data class ModelStatus(
     val statusText: String = "No local model loaded",
     val lastError: String? = null
 )
+
+enum class InferenceMode {
+    LOCAL,
+    REMOTE_API
+}
+
+data class ApiEndpointConfig(
+    val baseUrl: String = "",
+    val apiKey: String = "",
+    val model: String = ""
+) {
+    val isConfigured: Boolean get() = baseUrl.isNotBlank()
+}

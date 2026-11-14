@@ -60,17 +60,17 @@ class LiteRtLmService(private val appContext: Context) {
         val conv = eng.createConversation(
             ConversationConfig(
                 systemInstruction = Contents.of(
-                    "You are FRIDAY, a helpful on-device assistant. Answer the user's question directly, clearly, and completely. " +
+                    "You are FRIDAY, a helpful on-device assistant. Answer the user's question directly, clearly, and completely in plain text. " +
                         "Do not offer menus of how you can help unless asked. Stay on topic."
                 ),
-                samplerConfig = SamplerConfig(topK = 32, topP = 0.9, temperature = 0.3)
+                samplerConfig = SamplerConfig(topK = 32, topP = 0.9, temperature = 0.2)
             )
         )
         try {
-            conv.sendMessageAsync(prompt).collect { chunk ->
-                val text = chunk.toString()
-                if (text.isNotEmpty()) emit(text)
-            }
+            // Use synchronous sendMessage to avoid LiteRT-LM async callback/channel crash on completion.
+            val result = conv.sendMessage(prompt)
+            val text = result.toString().trim()
+            emit(if (text.isNotEmpty()) text else "(empty response)")
         } finally {
             runCatching { conv.close() }
         }
