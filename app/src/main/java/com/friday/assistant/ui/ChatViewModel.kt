@@ -10,6 +10,7 @@ import com.friday.assistant.data.ChatMessage
 import com.friday.assistant.data.ChatRole
 import com.friday.assistant.data.ChatSession
 import com.friday.assistant.data.ChatStore
+import com.friday.assistant.data.GenerationMetrics
 import com.friday.assistant.data.InferenceMode
 import com.friday.assistant.data.ModelStatus
 import kotlinx.coroutines.Job
@@ -31,7 +32,13 @@ data class ChatUiState(
     val useGpu: Boolean = false,
     val settingsOpen: Boolean = false,
     val inferenceMode: InferenceMode = InferenceMode.LOCAL,
-    val apiConfig: ApiEndpointConfig = ApiEndpointConfig()
+    val apiConfig: ApiEndpointConfig = ApiEndpointConfig(),
+    val metrics: GenerationMetrics = GenerationMetrics(),
+    val editingMessageId: String? = null,
+    val availableModels: List<String> = emptyList(),
+    val modelDownloadUrl: String = "",
+    val busyMessage: String? = null,
+    val apiTestMessage: String? = null
 ) {
     val activeSession: ChatSession
         get() = sessions.firstOrNull { it.id == activeSessionId } ?: sessions.first()
@@ -83,6 +90,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             val discovered = LiteRtLmService.discoverDefaultModelPath(getApplication<Application>().applicationContext).orEmpty()
             val chosen = savedPathPref.ifBlank { discovered }
             _uiState.update { it.copy(modelPathInput = chosen) }
+            refreshAvailableModels()
             if (chosen.isNotBlank()) {
                 _uiState.update { it.copy(modelStatus = localService.currentStatus(configuredPath = chosen, loading = true)) }
                 val result = localService.loadModel(chosen, savedUseGpu)
@@ -109,6 +117,35 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     fun onApiBaseUrlChange(value: String) { updateApi { it.copy(baseUrl = value) } }
     fun onApiKeyChange(value: String) { updateApi { it.copy(apiKey = value) } }
     fun onApiModelChange(value: String) { updateApi { it.copy(model = value) } }
+
+    fun onModelDownloadUrlChange(value: String) { _uiState.update { it.copy(modelDownloadUrl = value) } }
+
+    fun refreshAvailableModels() {
+        val models = LiteRtLmService.listAvailableModels(getApplication())
+        _uiState.update { it.copy(availableModels = models) }
+    }
+
+    fun downloadModel() {
+        val url = _uiState.value.modelDownloadUrl.trim()
+        if (url.isBlank()) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(busyMessage = "Downloading model...") }
+            val res = LiteRtLmService.downloadModel(getApplication(), url)
+            _uiState.update { state ->
+                val msg = res.fold(onSuccess = { "Downloaded: ${it.substringAfterLast('/')}" }, onFailure = { "Download failed: ${it.message}" })
+                state.copy(busyMessage = msg, modelPathInput = res.getOrNull() ?: state.modelPathInput)
+            }
+            refreshAvailableModels()
+        }
+    }
+
+    fun testApiEndpoint() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(apiTestMessage = "Testing endpoint...") }
+            val res = runCatching { apiService.testEndpoint(_uiState.value.apiConfig) }
+            _uiState.update { it.copy(apiTestMessage = res.getOrElse { "Test failed: ${it.message}" }) }
+        }
+    }
 
     fun onModelPathChange(value: String) {
         _uiState.update { it.copy(modelPathInput = value) }
@@ -198,6 +235,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.update { state ->
             state.copy(
                 isGenerating = false,
+                metrics = state.metrics.copy(finishedAtMs = System.currentTimeMillis()),
                 sessions = state.sessions.map { session ->
                     if (session.id == state.activeSessionId) {
                         session.copy(
@@ -264,30 +302,74 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     fun exportChatsJson(): String = chatStore.exportJson()
 
+    fun importChatsJson(json: String): Boolean {
+        val (sessions, activeId) = chatStore.importJson(json)
+        if (sessions.isEmpty()) return false
+        val fixed = sessions.map { s -> s.copy(messages = s.messages.map { it.copy(isStreaming = false) }) }
+        _uiState.update { it.copy(sessions = fixed, activeSessionId = activeId ?: fixed.first().id) }
+        persistChats()
+        return true
+    }
+
+    fun startEditMessage(messageId: String) {
+        val msg = _uiState.value.activeSession.messages.firstOrNull { it.id == messageId && it.role == ChatRole.USER } ?: return
+        _uiState.update { it.copy(input = msg.content, editingMessageId = messageId) }
+    }
+
+    fun cancelEdit() {
+        _uiState.update { it.copy(editingMessageId = null) }
+    }
+
     fun sendMessage() {
         val prompt = _uiState.value.input.trim()
         if (prompt.isBlank() || _uiState.value.isGenerating) return
 
-        val sessionId = _uiState.value.activeSessionId
-        val history = _uiState.value.activeSession.messages
-        val userMsg = ChatMessage(role = ChatRole.USER, content = prompt)
+        val stateNow = _uiState.value
+        val sessionId = stateNow.activeSessionId
+        val session = stateNow.activeSession
+        val editingId = stateNow.editingMessageId
         val assistantId = java.util.UUID.randomUUID().toString()
         val placeholder = ChatMessage(id = assistantId, role = ChatRole.ASSISTANT, content = "", isStreaming = true)
 
+        if (editingId != null) {
+            val idx = session.messages.indexOfFirst { it.id == editingId }
+            if (idx >= 0) {
+                val base = session.messages.take(idx)
+                val userMsg = session.messages[idx].copy(content = prompt, timestamp = System.currentTimeMillis())
+                val newMessages = base + userMsg + placeholder
+                _uiState.update { state ->
+                    state.copy(
+                        input = "",
+                        isGenerating = true,
+                        editingMessageId = null,
+                        sessions = state.sessions.map { s ->
+                            if (s.id == sessionId) s.copy(messages = newMessages, updatedAt = System.currentTimeMillis()) else s
+                        }
+                    )
+                }
+                startGeneration(sessionId, prompt, base, assistantId)
+                persistChats()
+                return
+            }
+        }
+
+        val history = session.messages
+        val userMsg = ChatMessage(role = ChatRole.USER, content = prompt)
         _uiState.update { state ->
             state.copy(
                 input = "",
                 isGenerating = true,
-                sessions = state.sessions.map { session ->
-                    if (session.id == sessionId) {
-                        val title = if (session.messages.count { it.role == ChatRole.USER } == 0)
-                            prompt.take(32).ifBlank { session.title } else session.title
-                        session.copy(
+                editingMessageId = null,
+                sessions = state.sessions.map { s ->
+                    if (s.id == sessionId) {
+                        val title = if (s.messages.count { it.role == ChatRole.USER } == 0)
+                            prompt.take(32).ifBlank { s.title } else s.title
+                        s.copy(
                             title = title,
-                            messages = session.messages + userMsg + placeholder,
+                            messages = s.messages + userMsg + placeholder,
                             updatedAt = System.currentTimeMillis()
                         )
-                    } else session
+                    } else s
                 }
             )
         }
@@ -302,10 +384,18 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun startGeneration(sessionId: String, prompt: String, history: List<ChatMessage>, assistantId: String) {
+        val start = System.currentTimeMillis()
+        val modelName = if (_uiState.value.inferenceMode == InferenceMode.REMOTE_API) {
+            _uiState.value.apiConfig.model.ifBlank { "remote" }
+        } else {
+            _uiState.value.modelStatus.resolvedPath?.substringAfterLast('/') ?: "local"
+        }
+        _uiState.update { it.copy(metrics = GenerationMetrics(startedAtMs = start, modelName = modelName)) }
         generationJob = viewModelScope.launch {
             val mode = _uiState.value.inferenceMode
             val apiConfig = _uiState.value.apiConfig
             val localStatus = _uiState.value.modelStatus
+            var first = true
             try {
                 when {
                     mode == InferenceMode.REMOTE_API -> {
@@ -315,6 +405,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                             appendToAssistant(sessionId, assistantId, "Remote API endpoint URL looks invalid. Use a full http(s) URL (e.g. https://api.example.com/v1).", done = true, error = true)
                         } else {
                             val reply = apiService.generateReply(prompt, history, apiConfig)
+                            val now = System.currentTimeMillis()
+                            _uiState.update { it.copy(metrics = it.metrics.copy(firstTokenAtMs = now, finishedAtMs = now, outputChars = reply.length)) }
                             appendToAssistant(sessionId, assistantId, reply.ifBlank { "(empty response)" }, done = true, error = false)
                         }
                     }
@@ -329,19 +421,29 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                         var latest = ""
                         localService.generateReply(prompt, localHistory).collect { chunk ->
                             latest = chunk // service emits accumulated text
+                            if (first && latest.isNotBlank()) {
+                                first = false
+                                _uiState.update { it.copy(metrics = it.metrics.copy(firstTokenAtMs = System.currentTimeMillis())) }
+                            }
+                            _uiState.update { it.copy(metrics = it.metrics.copy(outputChars = latest.length)) }
                             appendToAssistant(sessionId, assistantId, latest, done = false, error = false)
                         }
+                        _uiState.update { it.copy(metrics = it.metrics.copy(finishedAtMs = System.currentTimeMillis(), outputChars = latest.length)) }
                         appendToAssistant(sessionId, assistantId, latest.ifBlank { "(empty response)" }, done = true, error = false)
                     }
                     else -> {
                         val fallback = buildFallbackReply(prompt, localStatus, apiConfig)
+                        _uiState.update { it.copy(metrics = it.metrics.copy(finishedAtMs = System.currentTimeMillis(), outputChars = fallback.length)) }
                         appendToAssistant(sessionId, assistantId, fallback, done = true, error = false)
                     }
                 }
             } catch (e: kotlinx.coroutines.CancellationException) {
-                appendToAssistant(sessionId, assistantId, _uiState.value.sessions.flatMap { it.messages }.firstOrNull { it.id == assistantId }?.content?.ifBlank { "(stopped)" } ?: "(stopped)", done = true, error = false)
+                val stopped = _uiState.value.sessions.flatMap { it.messages }.firstOrNull { it.id == assistantId }?.content?.ifBlank { "(stopped)" } ?: "(stopped)"
+                _uiState.update { it.copy(metrics = it.metrics.copy(finishedAtMs = System.currentTimeMillis(), outputChars = stopped.length)) }
+                appendToAssistant(sessionId, assistantId, stopped, done = true, error = false)
             } catch (e: Exception) {
                 val msg = "Error: ${e.message ?: "generation failed"}"
+                _uiState.update { it.copy(metrics = it.metrics.copy(finishedAtMs = System.currentTimeMillis(), outputChars = msg.length)) }
                 appendToAssistant(sessionId, assistantId, msg, done = true, error = true)
             } finally {
                 _uiState.update { it.copy(isGenerating = false) }

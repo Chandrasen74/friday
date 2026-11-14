@@ -29,6 +29,12 @@ class ApiInferenceService(private val appContext: Context) {
             .apply()
     }
 
+    suspend fun testEndpoint(config: ApiEndpointConfig): String = withContext(Dispatchers.IO) {
+        if (config.baseUrl.isBlank()) error("Endpoint URL is required")
+        val reply = generateReply("Reply with exactly: FRIDAY_OK", emptyList(), config)
+        "Connected. Response: ${reply.take(120)}"
+    }
+
     suspend fun generateReply(prompt: String, history: List<ChatMessage>, config: ApiEndpointConfig): String = withContext(Dispatchers.IO) {
         val endpoint = resolveEndpoint(config.baseUrl)
         val url = URL(endpoint)

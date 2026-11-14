@@ -20,8 +20,8 @@ android {
         applicationId = "com.friday.assistant"
         minSdk = 26
         targetSdk = 35
-        versionCode = 15
-        versionName = "0.6.0"
+        versionCode = 16
+        versionName = "0.7.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -79,6 +79,7 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended")
 
     implementation("com.google.ai.edge.litertlm:litertlm-android:0.16.1")
+    implementation("com.mikepenz:multiplatform-markdown-renderer-m3:0.27.0")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")

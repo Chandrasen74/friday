@@ -187,16 +187,54 @@ class LiteRtLmService(private val appContext: Context) {
             outFile.absolutePath
         }
 
+        fun modelDirs(context: Context): List<File> = listOfNotNull(
+            File(context.filesDir, "models"),
+            context.getExternalFilesDir(null)?.let { File(it, "models") },
+            context.cacheDir
+        )
+
+        fun listAvailableModels(context: Context): List<String> = modelDirs(context)
+            .flatMap { dir -> dir.listFiles()?.toList().orEmpty() }
+            .filter { it.isFile && it.extension.equals("litertlm", ignoreCase = true) }
+            .map { it.absolutePath }
+            .distinct()
+            .sorted()
+
+        suspend fun downloadModel(context: Context, url: String): Result<String> = withContext(Dispatchers.IO) {
+            runCatching {
+                val u = url.trim()
+                require(u.startsWith("http://") || u.startsWith("https://")) { "Enter a valid http(s) URL" }
+                val name = u.substringAfterLast('/').substringBefore('?').ifBlank { "model.litertlm" }
+                val fileName = if (name.endsWith(".litertlm", true)) name else "$name.litertlm"
+                val outDir = File(context.filesDir, "models").apply { mkdirs() }
+                val outFile = File(outDir, fileName)
+                val tmp = File(outDir, "$fileName.tmp")
+                val conn = (java.net.URL(u).openConnection() as java.net.HttpURLConnection).apply {
+                    connectTimeout = 20000
+                    readTimeout = 60000
+                }
+                try {
+                    val code = conn.responseCode
+                    if (code !in 200..299) error("Download failed: HTTP $code")
+                    conn.inputStream.use { input ->
+                        java.io.FileOutputStream(tmp).use { output -> input.copyTo(output) }
+                    }
+                    if (outFile.exists()) outFile.delete()
+                    if (!tmp.renameTo(outFile)) {
+                        tmp.copyTo(outFile, overwrite = true)
+                        tmp.delete()
+                    }
+                    outFile.absolutePath
+                } finally {
+                    conn.disconnect()
+                }
+            }
+        }
+
         suspend fun discoverDefaultModelPath(context: Context): String? {
             ensureBundledModel(context)?.let { return it }
-            val dirs = listOfNotNull(
-                File(context.filesDir, "models"),
-                context.getExternalFilesDir(null)?.let { File(it, "models") }
-            )
-            val found = dirs
-                .flatMap { dir -> dir.listFiles()?.toList().orEmpty() }
-                .firstOrNull { it.isFile && it.extension.equals("litertlm", ignoreCase = true) }
-            return found?.absolutePath
+            val found = listAvailableModels(context).firstOrNull()
+            return found
         }
     }
 }
