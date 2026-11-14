@@ -31,11 +31,17 @@ class ApiInferenceService(private val appContext: Context) {
 
     suspend fun testEndpoint(config: ApiEndpointConfig): String = withContext(Dispatchers.IO) {
         if (config.baseUrl.isBlank()) error("Endpoint URL is required")
-        val reply = generateReply("Reply with exactly: FRIDAY_OK", emptyList(), config)
+        val reply = generateReply("Reply with exactly: FRIDAY_OK", emptyList(), config, "You are FRIDAY, a helpful assistant.", emptyList())
         "Connected. Response: ${reply.take(120)}"
     }
 
-    suspend fun generateReply(prompt: String, history: List<ChatMessage>, config: ApiEndpointConfig): String = withContext(Dispatchers.IO) {
+    suspend fun generateReply(
+        prompt: String,
+        history: List<ChatMessage>,
+        config: ApiEndpointConfig,
+        systemPrompt: String = com.friday.assistant.data.PersonaConfig.DEFAULT_PERSONA_PROMPT,
+        memories: List<String> = emptyList()
+    ): String = withContext(Dispatchers.IO) {
         val endpoint = resolveEndpoint(config.baseUrl)
         val url = URL(endpoint)
         val conn = (url.openConnection() as HttpURLConnection).apply {
@@ -51,7 +57,7 @@ class ApiInferenceService(private val appContext: Context) {
             }
         }
         try {
-            val body = buildRequestBody(endpoint, prompt, history, config)
+            val body = buildRequestBody(endpoint, prompt, history, config, systemPrompt, memories)
             conn.outputStream.use { os ->
                 os.write(body.toString().toByteArray(Charsets.UTF_8))
             }
@@ -86,23 +92,32 @@ class ApiInferenceService(private val appContext: Context) {
         }
     }
 
-    private fun buildRequestBody(endpoint: String, prompt: String, history: List<ChatMessage>, config: ApiEndpointConfig): JSONObject {
+    private fun buildRequestBody(
+        endpoint: String,
+        prompt: String,
+        history: List<ChatMessage>,
+        config: ApiEndpointConfig,
+        systemPrompt: String,
+        memories: List<String>
+    ): JSONObject {
         val lower = endpoint.lowercase()
         val filteredHistory = history.filter { it.role == ChatRole.USER || it.role == ChatRole.ASSISTANT }.takeLast(12)
+        val system = buildSystemText(systemPrompt, memories)
         return when {
             lower.endsWith("/api/generate") -> JSONObject().apply {
                 if (config.model.isNotBlank()) put("model", config.model.trim())
-                put("prompt", buildPromptTranscript(prompt, filteredHistory))
+                put("prompt", buildPromptTranscript(prompt, filteredHistory, system))
                 put("stream", false)
             }
             lower.endsWith("/api/chat") -> JSONObject().apply {
                 if (config.model.isNotBlank()) put("model", config.model.trim())
-                put("messages", buildMessagesJson(prompt, filteredHistory, "You are FRIDAY, a helpful assistant. Answer directly and clearly."))
+                put("messages", buildMessagesJson(prompt, filteredHistory, system))
                 put("stream", false)
             }
             lower.endsWith("/v1/messages") -> JSONObject().apply {
                 if (config.model.isNotBlank()) put("model", config.model.trim()) else put("model", "claude")
                 put("max_tokens", 1024)
+                put("system", system)
                 val msgs = JSONArray()
                 filteredHistory.forEach { m ->
                     val role = if (m.role == ChatRole.USER) "user" else "assistant"
@@ -113,10 +128,19 @@ class ApiInferenceService(private val appContext: Context) {
             }
             else -> JSONObject().apply {
                 if (config.model.isNotBlank()) put("model", config.model.trim())
-                put("messages", buildMessagesJson(prompt, filteredHistory, "You are FRIDAY, a helpful assistant. Answer the user's question directly, clearly, and completely."))
+                put("messages", buildMessagesJson(prompt, filteredHistory, system))
                 put("stream", false)
                 put("temperature", 0.3)
             }
+        }
+    }
+
+    private fun buildSystemText(systemPrompt: String, memories: List<String>): String = buildString {
+        append(systemPrompt.trim().ifBlank { com.friday.assistant.data.PersonaConfig.DEFAULT_PERSONA_PROMPT })
+        val mem = memories.map { it.trim() }.filter { it.isNotBlank() }.take(20)
+        if (mem.isNotEmpty()) {
+            append("\n\nPersistent memories about the user/context (use when relevant, do not invent):\n")
+            mem.forEach { append("- ").append(it.take(300)).append('\n') }
         }
     }
 
@@ -131,8 +155,8 @@ class ApiInferenceService(private val appContext: Context) {
         return messages
     }
 
-    private fun buildPromptTranscript(prompt: String, history: List<ChatMessage>): String = buildString {
-        append("You are FRIDAY, a helpful assistant. Answer directly and clearly.\n\n")
+    private fun buildPromptTranscript(prompt: String, history: List<ChatMessage>, system: String): String = buildString {
+        append(system.trim()).append("\n\n")
         history.forEach { m ->
             val role = if (m.role == ChatRole.USER) "User" else "Assistant"
             append(role).append(": ").append(m.content.trim()).append("\n")

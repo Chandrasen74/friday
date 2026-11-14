@@ -58,19 +58,27 @@ class LiteRtLmService(private val appContext: Context) {
         }
     }
 
-    fun generateReply(prompt: String, history: List<Pair<String, String>> = emptyList()): Flow<String> = callbackFlow {
+    fun generateReply(
+        prompt: String,
+        history: List<Pair<String, String>> = emptyList(),
+        systemPrompt: String = com.friday.assistant.data.PersonaConfig.DEFAULT_PERSONA_PROMPT,
+        memories: List<String> = emptyList()
+    ): Flow<String> = callbackFlow {
         val eng = mutex.withLock { engine }
             ?: run { close(IllegalStateException("No local model is loaded. Add a .litertlm model in Settings and load it.")); return@callbackFlow }
         activeGenerations++
+        val systemInstruction = buildString {
+            append(systemPrompt.trim().ifBlank { com.friday.assistant.data.PersonaConfig.DEFAULT_PERSONA_PROMPT })
+            val mem = memories.map { it.trim() }.filter { it.isNotBlank() }.take(20)
+            if (mem.isNotEmpty()) {
+                append("\n\nPersistent memories about the user/context (use when relevant, do not invent):\n")
+                mem.forEachIndexed { i, m -> append("- ").append(m.take(300)).append('\n') }
+            }
+        }
         val conv = try {
             eng.createConversation(
                 ConversationConfig(
-                    systemInstruction = Contents.of(
-                        "You are FRIDAY, a helpful on-device assistant. " +
-                            "Answer the user's latest request directly and clearly in plain text. " +
-                            "Stay on topic, be specific, and do not give unrelated tutorials or generic menus unless asked. " +
-                            "If you are unsure, say so briefly."
-                    ),
+                    systemInstruction = Contents.of(systemInstruction),
                     samplerConfig = SamplerConfig(topK = 40, topP = 0.95, temperature = 0.4)
                 )
             )

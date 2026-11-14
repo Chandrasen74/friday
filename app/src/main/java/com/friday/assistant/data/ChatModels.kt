@@ -8,6 +8,27 @@ enum class ChatRole {
     SYSTEM
 }
 
+data class MemoryItem(
+    val id: String = UUID.randomUUID().toString(),
+    val content: String,
+    val createdAt: Long = System.currentTimeMillis(),
+    val updatedAt: Long = System.currentTimeMillis(),
+    val source: String = "manual" // manual | extracted
+)
+
+data class PersonaConfig(
+    val systemPrompt: String = DEFAULT_PERSONA_PROMPT,
+    val useMemories: Boolean = true
+) {
+    companion object {
+        const val DEFAULT_PERSONA_PROMPT =
+            "You are F.R.I.D.A.Y., a calm, capable, and efficient personal assistant inspired by Tony Stark's AI. " +
+            "Be clear, concise, and practical. Anticipate helpful next steps when appropriate, but do not be intrusive. " +
+            "Use a professional, friendly tone with light dry wit only when it fits naturally. " +
+            "Answer the user's request directly, stay on topic, and be honest when you do not know something."
+    }
+}
+
 data class ChatMessage(
     val id: String = UUID.randomUUID().toString(),
     val role: ChatRole,
