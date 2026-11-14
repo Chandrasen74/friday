@@ -2,93 +2,63 @@ package com.friday.assistant.ai
 
 import android.content.Context
 import com.friday.assistant.data.ModelStatus
-import com.google.ai.edge.litertlm.Backend
-import com.google.ai.edge.litertlm.Contents
-import com.google.ai.edge.litertlm.Conversation
-import com.google.ai.edge.litertlm.ConversationConfig
-import com.google.ai.edge.litertlm.Engine
-import com.google.ai.edge.litertlm.EngineConfig
-import com.google.ai.edge.litertlm.SamplerConfig
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import java.io.File
 
+/**
+ * LiteRT-LM integration scaffold.
+ *
+ * Direct LiteRT-LM runtime dependency is not bundled in this build due to current
+ * Kotlin/AGP toolchain compatibility constraints in the project. The API surface
+ * and UI flow are kept ready so the runtime can be wired in once the toolchain is
+ * aligned with a compatible LiteRT-LM release.
+ */
 class LiteRtLmService(private val appContext: Context) {
-    private val mutex = Mutex()
-    private var engine: Engine? = null
-    private var conversation: Conversation? = null
     private var loadedPath: String? = null
 
-    suspend fun loadModel(modelPath: String, useGpu: Boolean = false): Result<ModelStatus> = mutex.withLock {
-        runCatching {
-            closeInternal()
+    suspend fun loadModel(modelPath: String, @Suppress("UNUSED_PARAMETER") useGpu: Boolean = false): Result<ModelStatus> {
+        return runCatching {
             val file = File(modelPath)
             require(file.exists() && file.isFile) { "Model file not found: $modelPath" }
-
-            val config = EngineConfig(
-                modelPath = file.absolutePath,
-                backend = if (useGpu) Backend.GPU() else Backend.CPU(),
-                cacheDir = appContext.cacheDir.absolutePath
-            )
-            val newEngine = Engine(config)
-            newEngine.initialize()
-            val newConversation = newEngine.createConversation(
-                ConversationConfig(
-                    systemInstruction = Contents.of(
-                        "You are FRIDAY, a helpful local-first assistant running on the user's Android device. Be concise, clear, and practical."
-                    ),
-                    samplerConfig = SamplerConfig(topK = 40, topP = 0.95, temperature = 0.7)
-                )
-            )
-            engine = newEngine
-            conversation = newConversation
+            require(file.extension.equals("litertlm", ignoreCase = true)) { "Expected a .litertlm model file." }
             loadedPath = file.absolutePath
             ModelStatus(
                 configuredPath = modelPath,
                 resolvedPath = file.absolutePath,
-                isReady = true,
-                statusText = "Model ready (${file.name})"
+                isReady = false,
+                statusText = "Model file found (runtime pending)",
+                lastError = "LiteRT-LM runtime not bundled in this build. Toolchain-compatible LiteRT-LM integration is pending."
             )
-        }.onFailure {
-            closeInternal()
         }
     }
 
     fun generateReply(prompt: String): Flow<String> = flow {
-        val conv = mutex.withLock { conversation }
-            ?: error("No local model is loaded. Add a .litertlm model in Settings and load it.")
-        conv.sendMessageAsync(prompt).collect { chunk ->
-            emit(chunk.toString())
-        }
+        emit(
+            "On-device LiteRT-LM runtime is not active in this build yet, so I can't run local inference for: \"${prompt.take(80)}\".\n\n" +
+                "The app UI and model-loading flow are ready. Next step is to align the project's Kotlin/AGP toolchain with a compatible LiteRT-LM release and enable the Engine/Conversation runtime."
+        )
     }.flowOn(Dispatchers.IO)
 
-    suspend fun unload(): ModelStatus = mutex.withLock {
-        closeInternal()
-        ModelStatus(statusText = "No local model loaded")
-    }
-
-    private fun closeInternal() {
-        runCatching { conversation?.close() }
-        runCatching { engine?.close() }
-        conversation = null
-        engine = null
+    suspend fun unload(): ModelStatus {
+        delay(10)
         loadedPath = null
+        return ModelStatus(statusText = "No local model loaded")
     }
 
     fun currentStatus(configuredPath: String = "", loading: Boolean = false, error: String? = null): ModelStatus {
-        val ready = conversation != null && loadedPath != null
+        val path = loadedPath
         return ModelStatus(
             configuredPath = configuredPath,
-            resolvedPath = loadedPath,
-            isReady = ready,
+            resolvedPath = path,
+            isReady = false,
             isLoading = loading,
             statusText = when {
-                loading -> "Loading model..."
-                ready -> "Model ready (${File(loadedPath!!).name})"
+                loading -> "Checking model..."
+                path != null -> "Model file found (runtime pending)"
                 error != null -> "Model error"
                 else -> "No local model loaded"
             },
