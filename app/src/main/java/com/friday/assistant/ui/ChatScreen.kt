@@ -77,6 +77,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import java.util.Locale
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.friday.assistant.data.ApiEndpointConfig
 import com.friday.assistant.data.ChatMessage
@@ -344,7 +345,7 @@ private fun ChatScreen(
                             text = state.activeSession.title,
                             style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
                             color = MaterialTheme.colorScheme.onSurface,
-                            maxLines = 1,
+                            maxLines = 2,
                             overflow = TextOverflow.Ellipsis
                         )
                         val mode = when {
@@ -500,10 +501,15 @@ private fun MessageRow(message: ChatMessage, onCopy: () -> Unit, onEdit: (() -> 
 }
 
 private fun formatMetrics(m: GenerationMetrics, generating: Boolean): String {
+    if (m.startedAtMs == null && !generating) return "ready"
     val ttft = m.ttftMs?.let { "${it}ms TTFT" }
-    val total = m.totalMs?.let { "${it}ms" }
-    val cps = m.charsPerSec?.let { String.format("%.1f chars/s", it) }
-    val parts = listOfNotNull(if (generating) "generating" else null, ttft, total, cps)
+    val total = m.totalMs?.let { "${it}ms total" }
+    val tps = m.tokensPerSec?.let { String.format(Locale.US, "%.1f tok/s", it) }
+    val cps = m.charsPerSec?.let { String.format(Locale.US, "%.1f ch/s", it) }
+    val out = if (m.outputChars > 0) "${m.outputChars} chars (~${m.estimatedTokens} tok)" else null
+    val chunks = if (m.chunkCount > 0) "${m.chunkCount} chunks" else null
+    val model = m.modelName.takeIf { it.isNotBlank() }
+    val parts = listOfNotNull(if (generating) "generating" else null, model, ttft, total, tps, cps, out, chunks)
     return if (parts.isEmpty()) "ready" else parts.joinToString(" • ")
 }
 
@@ -674,7 +680,7 @@ private fun SettingsScreen(
                     Text("Remote API endpoint", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface)
                     Spacer(Modifier.height(6.dp))
                     Text(
-                        "Add any API base URL (e.g. https://api.openai.com, http://host:port, or full /v1/chat/completions). API key/model are optional depending on provider.",
+                        "Flexible endpoints: OpenAI-compatible (/v1/chat/completions), Ollama (/api/chat, /api/generate), or a full custom URL. Base hosts auto-resolve to /v1/chat/completions. API key/model optional depending on provider.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

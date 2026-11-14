@@ -52,13 +52,21 @@ data class GenerationMetrics(
     val firstTokenAtMs: Long? = null,
     val finishedAtMs: Long? = null,
     val outputChars: Int = 0,
-    val modelName: String = ""
+    val modelName: String = "",
+    val chunkCount: Int = 0,
+    val mode: String = ""
 ) {
     val ttftMs: Long? get() = if (startedAtMs != null && firstTokenAtMs != null) firstTokenAtMs - startedAtMs else null
-    val totalMs: Long? get() = if (startedAtMs != null && finishedAtMs != null) finishedAtMs - startedAtMs else null
+    val totalMs: Long? get() = if (startedAtMs != null && finishedAtMs != null) finishedAtMs - startedAtMs else if (startedAtMs != null) System.currentTimeMillis() - startedAtMs else null
+    val estimatedTokens: Int get() = if (outputChars <= 0) 0 else kotlin.math.max(1, (outputChars / 4.0).toInt())
     val charsPerSec: Double? get() {
         val t = totalMs ?: return null
         if (t <= 0) return null
         return outputChars * 1000.0 / t
+    }
+    val tokensPerSec: Double? get() {
+        val t = totalMs ?: return null
+        if (t <= 0) return null
+        return estimatedTokens * 1000.0 / t
     }
 }
