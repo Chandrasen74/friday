@@ -192,12 +192,19 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                         }
                     }
                     localStatus.isReady -> {
-                        val buffer = StringBuilder()
-                        localService.generateReply(prompt).collect { chunk ->
-                            buffer.append(chunk)
-                            appendToAssistant(sessionId, assistantId, buffer.toString(), done = false, error = false)
+                        val localHistory = history
+                            .filter { it.role == ChatRole.USER || it.role == ChatRole.ASSISTANT }
+                            .mapNotNull { m ->
+                                val role = if (m.role == ChatRole.USER) "User" else "Assistant"
+                                val text = m.content.trim()
+                                if (text.isBlank() || text == "Thinking...") null else role to text
+                            }
+                        var latest = ""
+                        localService.generateReply(prompt, localHistory).collect { chunk ->
+                            latest = chunk // service emits accumulated text
+                            appendToAssistant(sessionId, assistantId, latest, done = false, error = false)
                         }
-                        appendToAssistant(sessionId, assistantId, buffer.toString().ifBlank { "(empty response)" }, done = true, error = false)
+                        appendToAssistant(sessionId, assistantId, latest.ifBlank { "(empty response)" }, done = true, error = false)
                     }
                     else -> {
                         val fallback = buildFallbackReply(prompt, localStatus, apiConfig)

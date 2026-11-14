@@ -57,28 +57,45 @@ class LiteRtLmService(private val appContext: Context) {
         }
     }
 
-    fun generateReply(prompt: String): Flow<String> = callbackFlow {
+    fun generateReply(prompt: String, history: List<Pair<String, String>> = emptyList()): Flow<String> = callbackFlow {
         val eng = mutex.withLock { engine }
             ?: run { close(IllegalStateException("No local model is loaded. Add a .litertlm model in Settings and load it.")); return@callbackFlow }
         val conv = try {
             eng.createConversation(
                 ConversationConfig(
                     systemInstruction = Contents.of(
-                        "You are FRIDAY, a helpful on-device assistant. Answer the user's question directly, clearly, and completely in plain text. " +
-                            "Do not offer menus of how you can help unless asked. Stay on topic."
+                        "You are FRIDAY, a helpful on-device assistant. " +
+                            "Answer the user's latest request directly and clearly in plain text. " +
+                            "Stay on topic, be specific, and do not give unrelated tutorials or generic menus unless asked. " +
+                            "If you are unsure, say so briefly."
                     ),
-                    samplerConfig = SamplerConfig(topK = 32, topP = 0.9, temperature = 0.2)
+                    samplerConfig = SamplerConfig(topK = 40, topP = 0.95, temperature = 0.4)
                 )
             )
         } catch (e: Exception) {
             close(e); return@callbackFlow
         }
 
+        val fullPrompt = buildString {
+            val recent = history.takeLast(6)
+            if (recent.isNotEmpty()) {
+                append("Previous conversation:\n")
+                recent.forEach { (role, text) ->
+                    val clean = text.trim().take(800)
+                    if (clean.isNotEmpty()) {
+                        append(role).append(": ").append(clean).append("\n")
+                    }
+                }
+                append("\n")
+            }
+            append("User: ").append(prompt.trim())
+        }
+
         val buffer = StringBuilder()
         var closed = false
         try {
             conv.sendMessageAsync(
-                prompt,
+                fullPrompt,
                 object : MessageCallback {
                     override fun onMessage(message: Message) {
                         val chunk = message.toString()
@@ -91,7 +108,7 @@ class LiteRtLmService(private val appContext: Context) {
                     override fun onDone() {
                         if (!closed) {
                             val text = buffer.toString().trim()
-                            if (text.isEmpty()) trySend("(empty response)")
+                            if (text.isEmpty()) trySend("(empty response)") else trySend(text)
                             close()
                         }
                     }
