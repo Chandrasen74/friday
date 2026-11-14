@@ -2,6 +2,7 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
+    id("maven-publish")
 }
 
 configurations.all {
@@ -12,9 +13,18 @@ configurations.all {
     }
 }
 
+val githubOwner = "Chandrasen74"
+val githubRepo = "friday"
+
 android {
     namespace = "com.friday.assistant"
     compileSdk = 35
+
+    publishing {
+        singleVariant("release") {
+            withSourcesJar()
+        }
+    }
 
     defaultConfig {
         applicationId = "com.friday.assistant"
@@ -59,6 +69,37 @@ android {
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        }
+    }
+}
+
+afterEvaluate {
+    publishing {
+        publications {
+            create<MavenPublication>("debugApk") {
+                groupId = "com.friday"
+                artifactId = "assistant"
+                version = android.defaultConfig.versionName ?: "0.0.0"
+                artifact(layout.buildDirectory.file("outputs/apk/debug/app-debug.apk")) {
+                    builtBy(tasks.named("assembleDebug"))
+                }
+                pom {
+                    name.set("F.R.I.D.A.Y")
+                    description.set("Local-first Android assistant with on-device LiteRT-LM inference and remote API support.")
+                    url.set("https://github.com/$githubOwner/$githubRepo")
+                    packaging = "apk"
+                }
+            }
+        }
+        repositories {
+            maven {
+                name = "GitHubPackages"
+                url = uri("https://maven.pkg.github.com/$githubOwner/$githubRepo")
+                credentials {
+                    username = (findProperty("gpr.user") as String?) ?: System.getenv("GITHUB_ACTOR")
+                    password = (findProperty("gpr.key") as String?) ?: System.getenv("GITHUB_TOKEN")
+                }
+            }
         }
     }
 }
