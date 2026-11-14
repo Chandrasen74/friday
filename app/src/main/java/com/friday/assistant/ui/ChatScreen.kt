@@ -402,8 +402,10 @@ private fun ChatScreen(
                             overflow = TextOverflow.Ellipsis
                         )
                     }
-                    IconButton(onClick = onRegenerate, enabled = !state.isGenerating && session != null) {
-                        Icon(Icons.Default.Refresh, contentDescription = "Regenerate", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (session != null) {
+                        IconButton(onClick = onRegenerate, enabled = !state.isGenerating) {
+                            Icon(Icons.Default.Refresh, contentDescription = "Regenerate", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
                     }
                     IconButton(onClick = onNew) {
                         Icon(Icons.Default.Add, contentDescription = "New", tint = MaterialTheme.colorScheme.onSurfaceVariant)
