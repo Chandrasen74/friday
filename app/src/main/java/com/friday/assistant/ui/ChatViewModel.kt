@@ -32,6 +32,7 @@ data class ChatUiState(
     val modelPathInput: String = "",
     val useGpu: Boolean = false,
     val settingsOpen: Boolean = false,
+    val chatsStorageOpen: Boolean = false,
     val inferenceMode: InferenceMode = InferenceMode.LOCAL,
     val apiConfig: ApiEndpointConfig = ApiEndpointConfig(),
     val metrics: GenerationMetrics = GenerationMetrics(),
@@ -109,7 +110,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun onInputChange(value: String) { _uiState.update { it.copy(input = value) } }
-    fun toggleSettings(open: Boolean) { _uiState.update { it.copy(settingsOpen = open) } }
+    fun toggleSettings(open: Boolean) { _uiState.update { it.copy(settingsOpen = open, chatsStorageOpen = if (open) it.chatsStorageOpen else false) } }
+    fun openChatsStorage(open: Boolean) { _uiState.update { it.copy(chatsStorageOpen = open, settingsOpen = if (open) true else it.settingsOpen) } }
 
     fun onInferenceModeChange(mode: InferenceMode) {
         _uiState.update { it.copy(inferenceMode = mode) }
@@ -187,14 +189,14 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             messages = listOf(ChatMessage(role = ChatRole.ASSISTANT, content = "New session started. How can I help?"))
         )
         _uiState.update { state ->
-            state.copy(sessions = listOf(session) + state.sessions, activeSessionId = session.id, input = "", settingsOpen = false, editingMessageId = null)
+            state.copy(sessions = listOf(session) + state.sessions, activeSessionId = session.id, input = "", settingsOpen = false, chatsStorageOpen = false, editingMessageId = null)
         }
         persistChats()
     }
 
     fun selectSession(id: String) {
         if (_uiState.value.isGenerating) stopGeneration()
-        _uiState.update { it.copy(activeSessionId = id, settingsOpen = false, editingMessageId = null) }
+        _uiState.update { it.copy(activeSessionId = id, settingsOpen = false, chatsStorageOpen = false, editingMessageId = null) }
         persistChats()
     }
 
@@ -325,7 +327,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         if (sessions.isEmpty()) return false
         val fixed = sessions.map { s -> s.copy(messages = s.messages.map { it.copy(isStreaming = false) }) }
         val resolvedActive = activeId ?: fixed.first().id
-        _uiState.update { it.copy(sessions = fixed, activeSessionId = resolvedActive, settingsOpen = false) }
+        _uiState.update { it.copy(sessions = fixed, activeSessionId = resolvedActive, settingsOpen = false, chatsStorageOpen = false) }
         viewModelScope.launch(Dispatchers.IO) { chatStore.save(fixed, resolvedActive) }
         return true
     }

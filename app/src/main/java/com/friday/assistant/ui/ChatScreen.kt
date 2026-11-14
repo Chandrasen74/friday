@@ -121,40 +121,50 @@ fun FridayApp(viewModel: ChatViewModel) {
             }
         }
     ) {
-        if (state.settingsOpen) {
-            SettingsScreen(
-                state = state,
-                onBack = { viewModel.toggleSettings(false) },
-                onPathChange = viewModel::onModelPathChange,
-                onGpuChange = viewModel::onUseGpuChange,
-                onLoad = viewModel::loadModel,
-                onUnload = viewModel::unloadModel,
-                onInferenceModeChange = viewModel::onInferenceModeChange,
-                onApiBaseUrlChange = viewModel::onApiBaseUrlChange,
-                onApiKeyChange = viewModel::onApiKeyChange,
-                onApiModelChange = viewModel::onApiModelChange,
-                onClearCurrentChat = viewModel::clearCurrentSession,
-                onClearAllChats = viewModel::clearAllChats,
-                onExportChats = viewModel::exportChatsJson,
-                onImportChats = viewModel::importChatsJson,
-                onRenameSession = viewModel::renameSession,
-                onModelDownloadUrlChange = viewModel::onModelDownloadUrlChange,
-                onDownloadModel = viewModel::downloadModel,
-                onTestApi = viewModel::testApiEndpoint,
-                onRefreshModels = viewModel::refreshAvailableModels
-            )
-        } else {
-            ChatScreen(
-                state = state,
-                onMenu = { scope.launch { drawerState.open() } },
-                onNew = { viewModel.newSession() },
-                onSettings = { viewModel.toggleSettings(true) },
-                onInputChange = viewModel::onInputChange,
-                onSend = viewModel::sendMessage,
-                onStop = viewModel::stopGeneration,
-                onRegenerate = viewModel::regenerateLastResponse,
-                onEditMessage = viewModel::startEditMessage
-            )
+        when {
+            state.settingsOpen && state.chatsStorageOpen -> {
+                ChatsStorageScreen(
+                    state = state,
+                    onBack = { viewModel.openChatsStorage(false) },
+                    onClearCurrentChat = viewModel::clearCurrentSession,
+                    onClearAllChats = viewModel::clearAllChats,
+                    onExportChats = viewModel::exportChatsJson,
+                    onImportChats = viewModel::importChatsJson,
+                    onRenameSession = viewModel::renameSession
+                )
+            }
+            state.settingsOpen -> {
+                SettingsScreen(
+                    state = state,
+                    onBack = { viewModel.toggleSettings(false) },
+                    onOpenChatsStorage = { viewModel.openChatsStorage(true) },
+                    onPathChange = viewModel::onModelPathChange,
+                    onGpuChange = viewModel::onUseGpuChange,
+                    onLoad = viewModel::loadModel,
+                    onUnload = viewModel::unloadModel,
+                    onInferenceModeChange = viewModel::onInferenceModeChange,
+                    onApiBaseUrlChange = viewModel::onApiBaseUrlChange,
+                    onApiKeyChange = viewModel::onApiKeyChange,
+                    onApiModelChange = viewModel::onApiModelChange,
+                    onModelDownloadUrlChange = viewModel::onModelDownloadUrlChange,
+                    onDownloadModel = viewModel::downloadModel,
+                    onTestApi = viewModel::testApiEndpoint,
+                    onRefreshModels = viewModel::refreshAvailableModels
+                )
+            }
+            else -> {
+                ChatScreen(
+                    state = state,
+                    onMenu = { scope.launch { drawerState.open() } },
+                    onNew = { viewModel.newSession() },
+                    onSettings = { viewModel.toggleSettings(true) },
+                    onInputChange = viewModel::onInputChange,
+                    onSend = viewModel::sendMessage,
+                    onStop = viewModel::stopGeneration,
+                    onRegenerate = viewModel::regenerateLastResponse,
+                    onEditMessage = viewModel::startEditMessage
+                )
+            }
         }
     }
 }
@@ -603,6 +613,7 @@ private fun ComposerBar(
 private fun SettingsScreen(
     state: ChatUiState,
     onBack: () -> Unit,
+    onOpenChatsStorage: () -> Unit,
     onPathChange: (String) -> Unit,
     onGpuChange: (Boolean) -> Unit,
     onLoad: () -> Unit,
@@ -611,20 +622,11 @@ private fun SettingsScreen(
     onApiBaseUrlChange: (String) -> Unit,
     onApiKeyChange: (String) -> Unit,
     onApiModelChange: (String) -> Unit,
-    onClearCurrentChat: () -> Unit,
-    onClearAllChats: () -> Unit,
-    onExportChats: () -> String,
-    onImportChats: (String) -> Boolean,
-    onRenameSession: (String, String) -> Unit,
     onModelDownloadUrlChange: (String) -> Unit,
     onDownloadModel: () -> Unit,
     onTestApi: () -> Unit,
     onRefreshModels: () -> Unit
 ) {
-    val clipboard = LocalClipboardManager.current
-    val context = LocalContext.current
-    var renameText by remember(state.activeSession.id, state.activeSession.title) { mutableStateOf(state.activeSession.title) }
-    var importText by remember { mutableStateOf("") }
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
@@ -786,6 +788,62 @@ private fun SettingsScreen(
             item {
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 Spacer(Modifier.height(4.dp))
+                Text("Chats & storage", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface)
+                Spacer(Modifier.height(6.dp))
+                Text("Manage sessions, rename chats, import/export, and clear stored history in a separate section.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.height(10.dp))
+                ActionButton("Open Chats & storage", primary = true, enabled = true) { onOpenChatsStorage() }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ChatsStorageScreen(
+    state: ChatUiState,
+    onBack: () -> Unit,
+    onClearCurrentChat: () -> Unit,
+    onClearAllChats: () -> Unit,
+    onExportChats: () -> String,
+    onImportChats: (String) -> Boolean,
+    onRenameSession: (String, String) -> Unit
+) {
+    val clipboard = LocalClipboardManager.current
+    val context = LocalContext.current
+    var renameText by remember(state.activeSession.id, state.activeSession.title) { mutableStateOf(state.activeSession.title) }
+    var importText by remember { mutableStateOf("") }
+
+    Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
+        topBar = {
+            Column(modifier = Modifier.statusBarsPadding().displayCutoutPadding()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.background)
+                        .padding(horizontal = 8.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TextButton(onClick = onBack) { Text("Back") }
+                    Spacer(Modifier.width(4.dp))
+                    Text(
+                        "Chats & storage",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            }
+        }
+    ) { padding ->
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            item {
                 Text("Chats & storage", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface)
                 Spacer(Modifier.height(6.dp))
                 Text("Chats are saved locally on device (durable app storage) and restored on launch.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
