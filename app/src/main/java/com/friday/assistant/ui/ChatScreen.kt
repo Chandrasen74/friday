@@ -539,70 +539,83 @@ private fun SettingsScreen(
                 }
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    "Use on-device LiteRT-LM or connect to an API endpoint (OpenAI-compatible chat completions).",
+                    if (state.inferenceMode == InferenceMode.REMOTE_API)
+                        "Active: Remote API. FRIDAY will send messages to your configured endpoint."
+                    else
+                        "Active: Local (LiteRT-LM). FRIDAY will use the on-device model.",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.primary
                 )
             }
 
-            item {
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                Spacer(Modifier.height(4.dp))
-                Text("Remote API endpoint", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface)
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    "Add any API base URL (e.g. https://api.openai.com, http://host:port, or full /v1/chat/completions). API key/model are optional depending on provider.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            item { SettingsTextField("Endpoint URL", state.apiConfig.baseUrl, "https://api.example.com/v1", onApiBaseUrlChange) }
-            item { SettingsTextField("API key (optional)", state.apiConfig.apiKey, "sk-...", onApiKeyChange) }
-            item { SettingsTextField("Model (optional)", state.apiConfig.model, "gpt-4o-mini / model-name", onApiModelChange) }
-            item {
-                val status = if (state.apiConfig.isConfigured) "Endpoint configured" else "No endpoint configured"
-                Text(status, style = MaterialTheme.typography.bodySmall, color = if (state.apiConfig.isConfigured) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-
-            item {
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                Spacer(Modifier.height(4.dp))
-                Text("On-device model (LiteRT-LM)", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface)
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    "Use a .litertlm model. Bundled model is auto-detected; you can also provide a local path.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            item { StatusPill(status = state.modelStatus) }
-            item { SettingsTextField("Model path", state.modelPathInput, "/storage/.../models/model.litertlm", onPathChange, mono = true) }
-            item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("Use GPU backend", color = MaterialTheme.colorScheme.onSurface)
-                        Text("Try GPU for supported models/devices; behavior depends on runtime.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    Switch(checked = state.useGpu, onCheckedChange = onGpuChange)
-                }
-            }
-            item {
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    ActionButton(text = if (state.modelStatus.isLoading) "Loading..." else "Load model", primary = true, enabled = !state.modelStatus.isLoading, onClick = onLoad)
-                    ActionButton(text = "Unload", primary = false, enabled = state.modelStatus.isReady, onClick = onUnload)
-                }
-            }
-            item {
-                state.modelStatus.resolvedPath?.let {
-                    Text("Loaded: $it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                state.modelStatus.lastError?.let {
+            if (state.inferenceMode == InferenceMode.REMOTE_API) {
+                item {
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    Spacer(Modifier.height(4.dp))
+                    Text("Remote API endpoint", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface)
                     Spacer(Modifier.height(6.dp))
-                    Text("Error: $it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                    Text(
+                        "Add any API base URL (e.g. https://api.openai.com, http://host:port, or full /v1/chat/completions). API key/model are optional depending on provider.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                item { SettingsTextField("Endpoint URL", state.apiConfig.baseUrl, "https://api.example.com/v1", onApiBaseUrlChange) }
+                item { SettingsTextField("API key (optional)", state.apiConfig.apiKey, "sk-...", onApiKeyChange) }
+                item { SettingsTextField("Model (optional)", state.apiConfig.model, "gpt-4o-mini / model-name", onApiModelChange) }
+                item {
+                    val status = if (state.apiConfig.isConfigured) "Endpoint configured and will be used for chat." else "No endpoint configured. Add a URL to use Remote API."
+                    Text(status, style = MaterialTheme.typography.bodySmall, color = if (state.apiConfig.isConfigured) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error)
+                }
+                item {
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    Text("Local model settings are hidden while Remote API mode is active.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            } else {
+                item {
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    Spacer(Modifier.height(4.dp))
+                    Text("On-device model (LiteRT-LM)", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface)
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "Use a .litertlm model. Bundled model is auto-detected; you can also provide a local path.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                item { StatusPill(status = state.modelStatus) }
+                item { SettingsTextField("Model path", state.modelPathInput, "/storage/.../models/model.litertlm", onPathChange, mono = true) }
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Use GPU backend", color = MaterialTheme.colorScheme.onSurface)
+                            Text("Try GPU for supported models/devices; behavior depends on runtime.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Switch(checked = state.useGpu, onCheckedChange = onGpuChange)
+                    }
+                }
+                item {
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        ActionButton(text = if (state.modelStatus.isLoading) "Loading..." else "Load model", primary = true, enabled = !state.modelStatus.isLoading, onClick = onLoad)
+                        ActionButton(text = "Unload", primary = false, enabled = state.modelStatus.isReady, onClick = onUnload)
+                    }
+                }
+                item {
+                    state.modelStatus.resolvedPath?.let {
+                        Text("Loaded: $it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    state.modelStatus.lastError?.let {
+                        Spacer(Modifier.height(6.dp))
+                        Text("Error: $it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                    }
+                }
+                item {
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    Text("Remote API settings are hidden while Local mode is active.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
