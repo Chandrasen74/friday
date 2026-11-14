@@ -40,16 +40,7 @@ class LiteRtLmService(private val appContext: Context) {
                 )
                 val newEngine = Engine(config)
                 newEngine.initialize()
-                val newConversation = newEngine.createConversation(
-                    ConversationConfig(
-                        systemInstruction = Contents.of(
-                            "You are FRIDAY, a helpful local-first assistant running on the user's Android device. Be concise, clear, and practical."
-                        ),
-                        samplerConfig = SamplerConfig(topK = 40, topP = 0.95, temperature = 0.7)
-                    )
-                )
                 engine = newEngine
-                conversation = newConversation
                 loadedPath = file.absolutePath
                 ModelStatus(
                     configuredPath = modelPath,
@@ -64,10 +55,24 @@ class LiteRtLmService(private val appContext: Context) {
     }
 
     fun generateReply(prompt: String): Flow<String> = flow {
-        val conv = mutex.withLock { conversation }
+        val eng = mutex.withLock { engine }
             ?: error("No local model is loaded. Add a .litertlm model in Settings and load it.")
-        conv.sendMessageAsync(prompt).collect { chunk ->
-            emit(chunk.toString())
+        val conv = eng.createConversation(
+            ConversationConfig(
+                systemInstruction = Contents.of(
+                    "You are FRIDAY, a helpful on-device assistant. Answer the user's question directly, clearly, and completely. " +
+                        "Do not offer menus of how you can help unless asked. Stay on topic."
+                ),
+                samplerConfig = SamplerConfig(topK = 32, topP = 0.9, temperature = 0.3)
+            )
+        )
+        try {
+            conv.sendMessageAsync(prompt).collect { chunk ->
+                val text = chunk.toString()
+                if (text.isNotEmpty()) emit(text)
+            }
+        } finally {
+            runCatching { conv.close() }
         }
     }.flowOn(Dispatchers.IO)
 
