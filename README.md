@@ -1,6 +1,5 @@
 # FRIDAY
 
-**Repository (local, prepared):** `REPO_ROOT`  
 **Upstream reference:** https://github.com/easy-developer1/jarvis-phone
 
 ![Screenshot of FRIDAY](screenshot.png)
