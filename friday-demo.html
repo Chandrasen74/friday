@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>F.R.I.D.A.Y Demo</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#1A1A1D; --surface:#202024; --surface2:#26262B; --line:#2A2F36; --line2:#334155;
+    --text:#EDEDED; --muted:#A8B3C2; --primary:#7DD3FC; --primary-dark:#0B1720; --primary-container:#1E3A52;
+    --user:#243B53; --assistant:#202024; --error:#F87171;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:#111;color:var(--text);font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+  .phone{width:390px;height:844px;margin:24px auto;background:var(--bg);border-radius:28px;overflow:hidden;position:relative;border:1px solid #2a2a30;box-shadow:0 20px 60px rgba(0,0,0,.55)}
+  .app{height:100%;display:flex;flex-direction:column;position:relative}
+  .topbar{padding:44px 10px 8px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line);background:var(--bg)}
+  .row{display:flex;align-items:center}
+  .icon-btn{width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;color:var(--text);font-size:20px}
+  .title{font-family:Orbitron,Inter,sans-serif;font-weight:700;color:var(--primary);font-size:18px;letter-spacing:.5px}
+  .sub{font-size:11px;color:var(--muted);margin-top:2px}
+  .metrics{font-size:11px;color:var(--muted);padding:0 12px 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .content{flex:1;overflow:auto;padding:10px 12px 12px;display:flex;flex-direction:column;gap:10px}
+  .bubble{max-width:86%;padding:10px 12px;border-radius:14px;line-height:1.45;font-size:14px;border:1px solid var(--line)}
+  .assistant{align-self:flex-start;background:var(--assistant);color:var(--text)}
+  .user{align-self:flex-end;background:var(--user);color:#EAF4FF;border-color:#33506B}
+  .label{font-size:11px;color:var(--muted);margin-bottom:4px}
+  .msg-meta{font-size:11px;color:var(--muted);margin-top:4px}
+  .composer{padding:10px 12px 22px;border-top:1px solid var(--line);display:flex;gap:8px;align-items:flex-end;background:var(--bg)}
+  .input{flex:1;min-height:44px;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:12px 14px;color:var(--muted);font-size:14px}
+  .send{width:44px;height:44px;border-radius:12px;background:var(--primary);color:var(--primary-dark);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:18px}
+  .drawer-wrap{position:absolute;inset:0;pointer-events:none}
+  .scrim{position:absolute;inset:0;background:rgba(0,0,0,.45);opacity:0}
+  .drawer{position:absolute;top:0;bottom:0;left:0;width:300px;background:var(--surface);transform:translateX(-100%);border-right:1px solid var(--line);display:flex;flex-direction:column;padding:44px 12px 16px}
+  .drawer-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+  .pill{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;background:#182635;color:#BEE7FF;font-size:12px;border:1px solid #28455E;margin-bottom:10px}
+  .dot{width:8px;height:8px;border-radius:50%;background:#4ADE80}
+  .section-title{font-size:12px;color:var(--muted);padding:6px 8px;text-transform:uppercase;letter-spacing:.08em}
+  .session{padding:10px;border-radius:10px;margin-bottom:6px;border:1px solid transparent}
+  .session.active{background:#223446;border-color:#355472}
+  .session .name{font-size:14px;color:var(--text);font-weight:500}
+  .session .prev{font-size:12px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .spacer{flex:1}
+  .settings-row{display:flex;align-items:center;gap:10px;padding:12px;border-radius:10px;color:var(--text);margin-top:8px}
+  hr{border:none;border-top:1px solid var(--line);margin:8px 0}
+  .code{background:#17181B;border:1px solid #2b2f36;border-radius:10px;padding:10px;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:12px;color:#D7E3F4;white-space:pre-wrap}
+  ul{margin:6px 0 0 18px;padding:0}
+  li{margin:4px 0}
+  /* states */
+  .show-drawer .scrim{opacity:1}
+  .show-drawer .drawer{transform:translateX(0)}
+  .settings-screen .main{display:none}
+  .settings-screen .settings-view{display:flex}
+  .settings-view{display:none;flex-direction:column;height:100%}
+  .settings-body{padding:12px 16px;overflow:auto;display:flex;flex-direction:column;gap:14px}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px}
+  .card h3{margin:0 0 6px;font-size:15px}
+  .card p{margin:0;color:var(--muted);font-size:13px;line-height:1.4}
+  .field{margin-top:10px}
+  .field label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px}
+  .field .box{background:#1b1c20;border:1px solid var(--line);border-radius:10px;padding:10px 12px;color:#cfd8e3;font-size:13px;font-family:ui-monospace,SFMono-Regular,Consolas,monospace}
+  .row-between{display:flex;align-items:center;justify-content:space-between;gap:12px}
+  .btn{display:inline-flex;align-items:center;justify-content:center;padding:10px 14px;border-radius:10px;font-weight:600;font-size:13px}
+  .btn.primary{background:var(--primary);color:var(--primary-dark)}
+  .btn.ghost{background:#26262B;color:var(--text);border:1px solid var(--line)}
+  .small{font-size:12px;color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="phone" id="phone">
+  <div class="app main" id="mainView">
+    <div class="topbar">
+      <div class="row" style="gap:2px">
+        <div class="icon-btn">☰</div>
+        <div style="margin-left:2px">
+          <div class="title">F.R.I.D.A.Y</div>
+          <div class="sub" id="chatTitle">Weekend planning</div>
+        </div>
+      </div>
+      <div class="row">
+        <div class="icon-btn" title="Regenerate">↻</div>
+        <div class="icon-btn" title="New">＋</div>
+      </div>
+    </div>
+    <div class="metrics">local • Qwen3-0.6B • 420ms TTFT • 2.1s total • 18.4 tok/s • 142 chars</div>
+    <div class="content" id="chatContent">
+      <div class="bubble assistant">
+        <div class="label">F.R.I.D.A.Y</div>
+        New session started. How can I help?
+      </div>
+      <div class="bubble user">
+        <div class="label">You</div>
+        Can you help me plan a productive Sunday and suggest a quick healthy breakfast?
+      </div>
+      <div class="bubble assistant">
+        <div class="label">F.R.I.D.A.Y</div>
+        Absolutely. Here is a simple Sunday plan:
+        <ul>
+          <li><b>08:00</b> Breakfast + light stretch</li>
+          <li><b>09:00</b> Focus block (top priority task)</li>
+          <li><b>11:00</b> Break and short walk</li>
+          <li><b>12:30</b> Lunch and reset</li>
+          <li><b>15:00</b> Errands or personal project</li>
+          <li><b>20:30</b> Wind down and prep for Monday</li>
+        </ul>
+        <div style="margin-top:8px"><b>Quick healthy breakfast:</b> Greek yogurt bowl with oats, berries, and a spoon of peanut butter (about 5 minutes).</div>
+      </div>
+      <div class="bubble user">
+        <div class="label">You</div>
+        Nice. Also summarize this in a checklist I can copy.
+      </div>
+      <div class="bubble assistant">
+        <div class="label">F.R.I.D.A.Y</div>
+        <div class="code">Sunday checklist
+- [ ] 08:00 Breakfast + stretch
+- [ ] 09:00 Focus block (priority task)
+- [ ] 11:00 Break + short walk
+- [ ] 12:30 Lunch and reset
+- [ ] 15:00 Errands / personal project
+- [ ] 20:30 Wind down + prep for Monday
+- [ ] Breakfast: Greek yogurt + oats + berries + peanut butter</div>
+        <div class="msg-meta">Tap to copy • Markdown supported</div>
+      </div>
+    </div>
+    <div class="composer">
+      <div class="input">Message F.R.I.D.A.Y...</div>
+      <div class="send">↑</div>
+    </div>
+
+    <div class="drawer-wrap" id="drawerWrap">
+      <div class="scrim"></div>
+      <div class="drawer">
+        <div class="drawer-header">
+          <div class="row" style="gap:8px">
+            <img src="https://cdn-icons-png.flaticon.com/512/5968/5968322.png" alt="logo" width="28" height="28" style="filter: hue-rotate(170deg) saturate(1.3);" />
+            <div class="title" style="font-size:17px">F.R.I.D.A.Y</div>
+          </div>
+          <div class="icon-btn">＋</div>
+        </div>
+        <div class="pill"><span class="dot"></span>Model ready (Qwen3-0.6B)</div>
+        <hr>
+        <div class="section-title">Sessions</div>
+        <div class="session active"><div class="name">Weekend planning</div><div class="prev">Here is a simple Sunday plan...</div></div>
+        <div class="session"><div class="name">Kotlin coroutines help</div><div class="prev">Use Dispatchers.IO for blocking work...</div></div>
+        <div class="session"><div class="name">Travel ideas</div><div class="prev">Three budget-friendly destinations...</div></div>
+        <div class="spacer"></div>
+        <hr>
+        <div class="settings-row">⚙️ <span>Settings</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="app settings-view" id="settingsView">
+    <div class="topbar">
+      <div class="row" style="gap:4px">
+        <div class="icon-btn">←</div>
+        <div class="title" style="font-size:18px;font-family:Inter,sans-serif">Settings</div>
+      </div>
+      <div style="width:40px"></div>
+    </div>
+    <div class="settings-body">
+      <div class="card">
+        <h3>Local on-device model</h3>
+        <p>LiteRT-LM with bundled Qwen3-0.6B model, ready for offline chat.</p>
+        <div class="field"><label>Model path</label><div class="box">/data/user/0/com.friday.assistant/files/models/Qwen3-0.6B_dynamic_wi4b32_afp32.litertlm</div></div>
+        <div class="row-between" style="margin-top:12px"><div><div style="font-weight:600">Use GPU (if available)</div><div class="small">CPU mode active</div></div><div class="btn ghost">Off</div></div>
+        <div style="margin-top:12px;display:flex;gap:10px"><div class="btn primary">Load model</div><div class="btn ghost">Refresh</div></div>
+      </div>
+      <div class="card">
+        <h3>Remote API mode</h3>
+        <p>Configure an OpenAI-compatible or custom endpoint for higher-quality responses.</p>
+        <div class="field"><label>Endpoint URL</label><div class="box">https://api.example.com/v1/chat/completions</div></div>
+        <div class="field"><label>Model</label><div class="box">gpt-4o-mini</div></div>
+      </div>
+      <div class="card">
+        <h3>Persona & memory</h3>
+        <p>Customize F.R.I.D.A.Y's behavior and manage persistent memories across chats.</p>
+      </div>
+      <div class="card">
+        <h3>Chats & storage</h3>
+        <p>Rename sessions, export/import JSON backups, and clear stored chat history.</p>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+  const params = new URLSearchParams(location.search);
+  const view = params.get('view') || 'chat';
+  const phone = document.getElementById('phone');
+  const mainView = document.getElementById('mainView');
+  const settingsView = document.getElementById('settingsView');
+  if (view === 'drawer') {
+    mainView.classList.add('show-drawer');
+  } else if (view === 'settings') {
+    phone.classList.add('settings-screen');
+  } else if (view === 'chat2') {
+    document.getElementById('chatTitle').textContent = 'Kotlin coroutines help';
+    document.querySelector('.metrics').textContent = 'remote • gpt-4o-mini • 610ms TTFT • 3.4s total • 42.1 tok/s • 486 chars';
+    document.getElementById('chatContent').innerHTML = `
+      <div class="bubble user"><div class="label">You</div>How should I move blocking file and network work off the main thread in Android with coroutines?</div>
+      <div class="bubble assistant"><div class="label">F.R.I.D.A.Y</div>
+        Use <b>Dispatchers.IO</b> for blocking I/O and keep UI updates on the main thread:
+        <div class="code">viewModelScope.launch {
+    val data = withContext(Dispatchers.IO) {
+        api.fetchReport() // network / disk
+    }
+    _uiState.update { it.copy(report = data) }
+}</div>
+        <ul>
+          <li>Launch from <code>viewModelScope</code> or a lifecycle-aware scope.</li>
+          <li>Use <code>withContext(Dispatchers.IO)</code> for blocking calls.</li>
+          <li>Handle cancellation and errors with <code>try/catch</code>.</li>
+          <li>Keep CPU-heavy parsing on <code>Dispatchers.Default</code> if needed.</li>
+        </ul>
+      </div>
+      <div class="bubble user"><div class="label">You</div>Can you also show a safe retry pattern?</div>
+      <div class="bubble assistant"><div class="label">F.R.I.D.A.Y</div>
+        <div class="code">suspend fun &lt;T&gt; retry(times: Int = 3, block: suspend () -&gt; T): T {
+    var last: Exception? = null
+    repeat(times) { attempt -&gt;
+        try { return block() } catch (e: Exception) {
+            last = e
+            if (attempt &lt; times - 1) delay(500L * (attempt + 1))
+        }
+    }
+    throw last ?: IllegalStateException("Retry failed")
+}</div>
+        <div class="msg-meta">Streaming complete • Copy available</div>
+      </div>`;
+  }
+</script>
+</body>
+</html>
