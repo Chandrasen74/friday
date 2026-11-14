@@ -9,14 +9,17 @@ import com.friday.assistant.data.ApiEndpointConfig
 import com.friday.assistant.data.ChatMessage
 import com.friday.assistant.data.ChatRole
 import com.friday.assistant.data.ChatSession
+import com.friday.assistant.data.ChatStore
 import com.friday.assistant.data.InferenceMode
 import com.friday.assistant.data.ModelStatus
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 data class ChatUiState(
     val sessions: List<ChatSession> = listOf(ChatSession()),
@@ -37,25 +40,34 @@ data class ChatUiState(
 class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private val localService = LiteRtLmService(application.applicationContext)
     private val apiService = ApiInferenceService(application.applicationContext)
+    private val chatStore = ChatStore(application.applicationContext)
     private var generationJob: Job? = null
 
     private val _uiState = MutableStateFlow(ChatUiState())
     val uiState: StateFlow<ChatUiState> = _uiState.asStateFlow()
 
     init {
-        val initial = ChatSession(
-            title = "New session",
-            messages = listOf(
-                ChatMessage(
-                    role = ChatRole.ASSISTANT,
-                    content = "Hi, I'm FRIDAY. I can run on-device with LiteRT-LM or use a remote API endpoint you configure in Settings."
+        val savedApi = apiService.loadConfig()
+        val (savedSessions, savedActiveId) = chatStore.load()
+        val sessions = if (savedSessions.isNotEmpty()) {
+            savedSessions.map { s -> s.copy(messages = s.messages.map { it.copy(isStreaming = false) }) }
+        } else {
+            listOf(
+                ChatSession(
+                    title = "New session",
+                    messages = listOf(
+                        ChatMessage(
+                            role = ChatRole.ASSISTANT,
+                            content = "Hi, I'm FRIDAY. I can run on-device with LiteRT-LM or use a remote API endpoint you configure in Settings."
+                        )
+                    )
                 )
             )
-        )
-        val savedApi = apiService.loadConfig()
+        }
+        val activeId = sessions.firstOrNull { it.id == savedActiveId }?.id ?: sessions.first().id
         _uiState.value = ChatUiState(
-            sessions = listOf(initial),
-            activeSessionId = initial.id,
+            sessions = sessions,
+            activeSessionId = activeId,
             modelStatus = ModelStatus(statusText = "Preparing bundled model..."),
             apiConfig = savedApi
         )
@@ -98,6 +110,13 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     fun saveApiConfig() { apiService.saveConfig(_uiState.value.apiConfig) }
 
+    private fun persistChats() {
+        val snapshot = _uiState.value
+        viewModelScope.launch(Dispatchers.IO) {
+            chatStore.save(snapshot.sessions, snapshot.activeSessionId)
+        }
+    }
+
     fun newSession() {
         val session = ChatSession(
             title = "New session",
@@ -106,9 +125,13 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.update { state ->
             state.copy(sessions = listOf(session) + state.sessions, activeSessionId = session.id, input = "", settingsOpen = false)
         }
+        persistChats()
     }
 
-    fun selectSession(id: String) { _uiState.update { it.copy(activeSessionId = id, settingsOpen = false) } }
+    fun selectSession(id: String) {
+        _uiState.update { it.copy(activeSessionId = id, settingsOpen = false) }
+        persistChats()
+    }
 
     fun deleteSession(id: String) {
         _uiState.update { state ->
@@ -121,6 +144,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 state.copy(sessions = remaining, activeSessionId = active)
             }
         }
+        persistChats()
     }
 
     fun loadModel() {
@@ -216,8 +240,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 appendToAssistant(sessionId, assistantId, msg, done = true, error = true)
             } finally {
                 _uiState.update { it.copy(isGenerating = false) }
+                persistChats()
             }
         }
+        persistChats() // save user message/placeholder immediately
     }
 
     private fun appendToAssistant(sessionId: String, messageId: String, content: String, done: Boolean, error: Boolean) {
@@ -235,6 +261,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 }
             )
         }
+        if (done) persistChats()
     }
 
     private fun buildFallbackReply(prompt: String, status: ModelStatus, api: ApiEndpointConfig): String {
