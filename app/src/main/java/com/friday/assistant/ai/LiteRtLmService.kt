@@ -7,7 +7,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.FileOutputStream
 
 /**
  * LiteRT-LM integration scaffold.
@@ -67,10 +69,36 @@ class LiteRtLmService(private val appContext: Context) {
     }
 
     companion object {
-        fun discoverDefaultModelPath(context: Context): String? {
+        private const val BUNDLED_ASSET_DIR = "models"
+
+        suspend fun ensureBundledModel(context: Context): String? = withContext(Dispatchers.IO) {
+            val assets = runCatching { context.assets.list(BUNDLED_ASSET_DIR)?.toList().orEmpty() }
+                .getOrDefault(emptyList())
+            val bundledName = assets.firstOrNull { it.endsWith(".litertlm", ignoreCase = true) } ?: return@withContext null
+            val outDir = File(context.filesDir, "models").apply { mkdirs() }
+            val outFile = File(outDir, bundledName)
+            if (!outFile.exists() || outFile.length() == 0L) {
+                val tmp = File(outDir, "$bundledName.tmp")
+                context.assets.open("$BUNDLED_ASSET_DIR/$bundledName").use { input ->
+                    FileOutputStream(tmp).use { output ->
+                        input.copyTo(output)
+                        output.flush()
+                    }
+                }
+                if (outFile.exists()) outFile.delete()
+                if (!tmp.renameTo(outFile)) {
+                    tmp.copyTo(outFile, overwrite = true)
+                    tmp.delete()
+                }
+            }
+            outFile.absolutePath
+        }
+
+        suspend fun discoverDefaultModelPath(context: Context): String? {
+            ensureBundledModel(context)?.let { return it }
             val dirs = listOfNotNull(
-                context.getExternalFilesDir(null)?.let { File(it, "models") },
-                File(context.filesDir, "models")
+                File(context.filesDir, "models"),
+                context.getExternalFilesDir(null)?.let { File(it, "models") }
             )
             val found = dirs
                 .flatMap { dir -> dir.listFiles()?.toList().orEmpty() }

@@ -33,6 +33,9 @@ keystore.properties
 .DS_Store
 Thumbs.db
 
+# Bundled large model assets (too large for normal git push)
+app/src/main/assets/models/*.litertlm
+
 # Logs
 *.log
 

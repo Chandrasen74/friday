@@ -47,16 +47,28 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 )
             )
         )
-        val discovered = LiteRtLmService.discoverDefaultModelPath(application.applicationContext).orEmpty()
         _uiState.value = ChatUiState(
             sessions = listOf(initial),
             activeSessionId = initial.id,
-            modelPathInput = discovered,
-            modelStatus = ModelStatus(
-                configuredPath = discovered,
-                statusText = if (discovered.isNotBlank()) "Model found. Tap Load model." else "No local model loaded"
-            )
+            modelStatus = ModelStatus(statusText = "Preparing bundled model...")
         )
+        viewModelScope.launch {
+            val discovered = LiteRtLmService.discoverDefaultModelPath(getApplication<Application>().applicationContext).orEmpty()
+            _uiState.update { it.copy(modelPathInput = discovered) }
+            if (discovered.isNotBlank()) {
+                _uiState.update { it.copy(modelStatus = service.currentStatus(configuredPath = discovered, loading = true)) }
+                val result = service.loadModel(discovered, _uiState.value.useGpu)
+                _uiState.update { state ->
+                    state.copy(
+                        modelStatus = result.getOrElse { e ->
+                            service.currentStatus(configuredPath = discovered, error = e.message ?: "Failed to load model")
+                        }
+                    )
+                }
+            } else {
+                _uiState.update { it.copy(modelStatus = ModelStatus(statusText = "No local model loaded")) }
+            }
+        }
     }
 
     fun onInputChange(value: String) {
