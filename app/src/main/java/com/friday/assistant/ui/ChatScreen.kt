@@ -98,6 +98,7 @@ import com.friday.assistant.data.ModelStatus
 import com.friday.assistant.ui.theme.FridayDisplayFont
 import com.mikepenz.markdown.m3.Markdown
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -109,6 +110,17 @@ fun FridayApp(viewModel: ChatViewModel) {
     val scope = rememberCoroutineScope()
     val keyboardController = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
+    var showSplash by remember { mutableStateOf(true) }
+
+    LaunchedEffect(Unit) {
+        delay(1200)
+        showSplash = false
+    }
+
+    if (showSplash) {
+        SplashBrandingScreen()
+        return
+    }
 
     ModalNavigationDrawer(
         drawerState = drawerState,
@@ -184,6 +196,33 @@ fun FridayApp(viewModel: ChatViewModel) {
                     onEditMessage = viewModel::startEditMessage
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun SplashBrandingScreen() {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Image(
+                painter = painterResource(id = R.drawable.friday_logo_blue),
+                contentDescription = "F.R.I.D.A.Y logo",
+                modifier = Modifier.size(140.dp)
+            )
+            Spacer(Modifier.height(20.dp))
+            Text(
+                text = "F.R.I.D.A.Y",
+                style = MaterialTheme.typography.headlineLarge.copy(
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = FridayDisplayFont
+                ),
+                color = MaterialTheme.colorScheme.primary
+            )
         }
     }
 }
