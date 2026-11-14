@@ -94,7 +94,9 @@ import com.friday.assistant.data.ChatRole
 import com.friday.assistant.data.ChatSession
 import com.friday.assistant.data.GenerationMetrics
 import com.friday.assistant.data.InferenceMode
+import com.friday.assistant.data.MemoryItem
 import com.friday.assistant.data.ModelStatus
+import com.friday.assistant.data.PersonaConfig
 import com.friday.assistant.ui.theme.FridayDisplayFont
 import com.mikepenz.markdown.m3.Markdown
 import kotlinx.coroutines.Dispatchers
@@ -149,11 +151,26 @@ fun FridayApp(viewModel: ChatViewModel) {
                     onRenameSession = viewModel::renameSession
                 )
             }
+            state.settingsOpen && state.personaMemoryOpen -> {
+                PersonaMemoryScreen(
+                    state = state,
+                    onBack = { viewModel.openPersonaMemory(false) },
+                    onPersonaPromptChange = viewModel::onPersonaPromptChange,
+                    onResetPersonaPrompt = viewModel::resetPersonaPrompt,
+                    onUseMemoriesChange = viewModel::onUseMemoriesChange,
+                    onAddMemory = viewModel::addMemory,
+                    onUpdateMemory = viewModel::updateMemory,
+                    onDeleteMemory = viewModel::deleteMemory,
+                    onClearMemories = viewModel::clearMemories,
+                    onExtractMemories = viewModel::extractMemoriesFromCurrentChat
+                )
+            }
             state.settingsOpen -> {
                 SettingsScreen(
                     state = state,
                     onBack = { viewModel.toggleSettings(false) },
                     onOpenChatsStorage = { viewModel.openChatsStorage(true) },
+                    onOpenPersonaMemory = { viewModel.openPersonaMemory(true) },
                     onPathChange = viewModel::onModelPathChange,
                     onGpuChange = viewModel::onUseGpuChange,
                     onLoad = viewModel::loadModel,
@@ -686,6 +703,7 @@ private fun SettingsScreen(
     state: ChatUiState,
     onBack: () -> Unit,
     onOpenChatsStorage: () -> Unit,
+    onOpenPersonaMemory: () -> Unit,
     onPathChange: (String) -> Unit,
     onGpuChange: (Boolean) -> Unit,
     onLoad: () -> Unit,
@@ -862,12 +880,219 @@ private fun SettingsScreen(
             item {
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 Spacer(Modifier.height(4.dp))
+                Text("Persona & memory", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface)
+                Spacer(Modifier.height(6.dp))
+                Text("Configure F.R.I.D.A.Y's behavior prompt and manage persistent memories used across chats.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.height(10.dp))
+                ActionButton("Open Persona & memory", primary = true, enabled = true) { onOpenPersonaMemory() }
+            }
+
+            item {
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                Spacer(Modifier.height(4.dp))
                 Text("Chats & storage", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface)
                 Spacer(Modifier.height(6.dp))
                 Text("Manage sessions, rename chats, import/export, and clear stored history in a separate section.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(Modifier.height(10.dp))
                 ActionButton("Open Chats & storage", primary = true, enabled = true) { onOpenChatsStorage() }
             }
+        }
+    }
+}
+
+@Composable
+private fun PersonaMemoryScreen(
+    state: ChatUiState,
+    onBack: () -> Unit,
+    onPersonaPromptChange: (String) -> Unit,
+    onResetPersonaPrompt: () -> Unit,
+    onUseMemoriesChange: (Boolean) -> Unit,
+    onAddMemory: (String) -> Unit,
+    onUpdateMemory: (String, String) -> Unit,
+    onDeleteMemory: (String) -> Unit,
+    onClearMemories: () -> Unit,
+    onExtractMemories: () -> Unit
+) {
+    val context = LocalContext.current
+    var newMemoryText by remember { mutableStateOf("") }
+    var editingMemoryId by remember { mutableStateOf<String?>(null) }
+    var editingMemoryText by remember { mutableStateOf("") }
+
+    Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
+        topBar = {
+            Column(modifier = Modifier.statusBarsPadding().displayCutoutPadding()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.background)
+                        .padding(horizontal = 8.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = MaterialTheme.colorScheme.onSurface)
+                    }
+                    Spacer(Modifier.width(4.dp))
+                    Text(
+                        "Persona & memory",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            }
+        }
+    ) { padding ->
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            item {
+                Text("Persona / behavior prompt", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface)
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    "This system prompt is applied to local and remote responses to shape how F.R.I.D.A.Y behaves.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(8.dp))
+                SettingsTextField(
+                    label = "System prompt",
+                    value = state.personaConfig.systemPrompt,
+                    placeholder = PersonaConfig.DEFAULT_PERSONA_PROMPT,
+                    onChange = onPersonaPromptChange
+                )
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    ActionButton("Reset to default", primary = false, enabled = state.personaConfig.systemPrompt != PersonaConfig.DEFAULT_PERSONA_PROMPT) {
+                        onResetPersonaPrompt()
+                        Toast.makeText(context, "Persona reset to default", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+
+            item {
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Use persistent memories", color = MaterialTheme.colorScheme.onSurface)
+                        Text("When enabled, saved memories are included as context in responses.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Switch(checked = state.personaConfig.useMemories, onCheckedChange = onUseMemoriesChange)
+                }
+            }
+
+            item {
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                Text("Persistent memory", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface)
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    "Store user preferences, facts, and context. You can add/edit manually or extract from the current chat using the active model.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    ActionButton(
+                        text = if (state.isMemoryBusy) "Working..." else "Extract from current chat",
+                        primary = true,
+                        enabled = !state.isMemoryBusy && !state.isGenerating
+                    ) { onExtractMemories() }
+                    ActionButton("Clear all memories", primary = false, enabled = state.memories.isNotEmpty() && !state.isMemoryBusy) {
+                        onClearMemories()
+                        Toast.makeText(context, "Memories cleared", Toast.LENGTH_SHORT).show()
+                    }
+                }
+                state.memoryBusyMessage?.let {
+                    Spacer(Modifier.height(8.dp))
+                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+
+            item {
+                val isEditing = editingMemoryId != null
+                SettingsTextField(
+                    label = if (isEditing) "Edit memory" else "Add memory",
+                    value = if (isEditing) editingMemoryText else newMemoryText,
+                    placeholder = "e.g. Prefers concise answers and dark mode.",
+                    onChange = { if (isEditing) editingMemoryText = it else newMemoryText = it }
+                )
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    if (isEditing) {
+                        ActionButton("Save", primary = true, enabled = editingMemoryText.isNotBlank()) {
+                            val id = editingMemoryId ?: return@ActionButton
+                            onUpdateMemory(id, editingMemoryText)
+                            editingMemoryId = null
+                            editingMemoryText = ""
+                            Toast.makeText(context, "Memory updated", Toast.LENGTH_SHORT).show()
+                        }
+                        ActionButton("Cancel", primary = false, enabled = true) {
+                            editingMemoryId = null
+                            editingMemoryText = ""
+                        }
+                    } else {
+                        ActionButton("Add memory", primary = true, enabled = newMemoryText.isNotBlank()) {
+                            onAddMemory(newMemoryText)
+                            newMemoryText = ""
+                            Toast.makeText(context, "Memory added", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }
+            }
+
+            item {
+                Text("Saved memories (${state.memories.size})", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurface)
+            }
+
+            if (state.memories.isEmpty()) {
+                item {
+                    Text("No memories saved yet.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            } else {
+                items(state.memories, key = { it.id }) { mem ->
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(MaterialTheme.colorScheme.surface)
+                            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(12.dp))
+                            .padding(12.dp)
+                    ) {
+                        Text(mem.content, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.bodySmall)
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            if (mem.source == "extracted") "Extracted memory" else "Manual memory",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.labelSmall
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            ActionButton("Edit", primary = false, enabled = !state.isMemoryBusy) {
+                                editingMemoryId = mem.id
+                                editingMemoryText = mem.content
+                            }
+                            ActionButton("Delete", primary = false, enabled = !state.isMemoryBusy) {
+                                onDeleteMemory(mem.id)
+                                if (editingMemoryId == mem.id) {
+                                    editingMemoryId = null
+                                    editingMemoryText = ""
+                                }
+                                Toast.makeText(context, "Memory deleted", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }
+                }
+            }
+
+            item { Spacer(Modifier.height(12.dp)) }
         }
     }
 }

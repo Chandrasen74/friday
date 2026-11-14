@@ -12,7 +12,10 @@ import com.friday.assistant.data.ChatSession
 import com.friday.assistant.data.ChatStore
 import com.friday.assistant.data.GenerationMetrics
 import com.friday.assistant.data.InferenceMode
+import com.friday.assistant.data.MemoryItem
+import com.friday.assistant.data.MemoryStore
 import com.friday.assistant.data.ModelStatus
+import com.friday.assistant.data.PersonaConfig
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -33,6 +36,7 @@ data class ChatUiState(
     val useGpu: Boolean = false,
     val settingsOpen: Boolean = false,
     val chatsStorageOpen: Boolean = false,
+    val personaMemoryOpen: Boolean = false,
     val inferenceMode: InferenceMode = InferenceMode.LOCAL,
     val apiConfig: ApiEndpointConfig = ApiEndpointConfig(),
     val metrics: GenerationMetrics = GenerationMetrics(),
@@ -40,7 +44,11 @@ data class ChatUiState(
     val availableModels: List<String> = emptyList(),
     val modelDownloadUrl: String = "",
     val busyMessage: String? = null,
-    val apiTestMessage: String? = null
+    val apiTestMessage: String? = null,
+    val personaConfig: PersonaConfig = PersonaConfig(),
+    val memories: List<MemoryItem> = emptyList(),
+    val memoryBusyMessage: String? = null,
+    val isMemoryBusy: Boolean = false
 ) {
     val activeSession: ChatSession?
         get() = sessions.firstOrNull { it.id == activeSessionId } ?: sessions.firstOrNull()
@@ -51,6 +59,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private val localService = LiteRtLmService(application.applicationContext)
     private val apiService = ApiInferenceService(application.applicationContext)
     private val chatStore = ChatStore(application.applicationContext)
+    private val memoryStore = MemoryStore(application.applicationContext)
     private var generationJob: Job? = null
 
     private val _uiState = MutableStateFlow(ChatUiState())
@@ -63,6 +72,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         val savedPathPref = appPrefs.getString("model_path", "") ?: ""
         val savedUseGpu = appPrefs.getBoolean("use_gpu", false)
         val (savedSessions, savedActiveId) = chatStore.load()
+        val memorySnapshot = memoryStore.load()
         val sessions = if (savedSessions.isNotEmpty()) {
             savedSessions.map { s -> s.copy(messages = s.messages.map { it.copy(isStreaming = false) }) }
         } else {
@@ -76,7 +86,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             apiConfig = savedApi,
             inferenceMode = savedMode,
             modelPathInput = savedPathPref,
-            useGpu = savedUseGpu
+            useGpu = savedUseGpu,
+            personaConfig = memorySnapshot.persona,
+            memories = memorySnapshot.memories
         )
         viewModelScope.launch {
             val discovered = LiteRtLmService.discoverDefaultModelPath(getApplication<Application>().applicationContext).orEmpty()
@@ -100,8 +112,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun onInputChange(value: String) { _uiState.update { it.copy(input = value) } }
-    fun toggleSettings(open: Boolean) { _uiState.update { it.copy(settingsOpen = open, chatsStorageOpen = if (open) it.chatsStorageOpen else false) } }
-    fun openChatsStorage(open: Boolean) { _uiState.update { it.copy(chatsStorageOpen = open, settingsOpen = if (open) true else it.settingsOpen) } }
+    fun toggleSettings(open: Boolean) { _uiState.update { it.copy(settingsOpen = open, chatsStorageOpen = if (open) it.chatsStorageOpen else false, personaMemoryOpen = if (open) it.personaMemoryOpen else false) } }
+    fun openChatsStorage(open: Boolean) { _uiState.update { it.copy(chatsStorageOpen = open, personaMemoryOpen = false, settingsOpen = if (open) true else it.settingsOpen) } }
+    fun openPersonaMemory(open: Boolean) { _uiState.update { it.copy(personaMemoryOpen = open, chatsStorageOpen = false, settingsOpen = if (open) true else it.settingsOpen) } }
 
     fun onInferenceModeChange(mode: InferenceMode) {
         _uiState.update { it.copy(inferenceMode = mode) }
@@ -170,6 +183,140 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 chatStore.save(snapshot.sessions, snapshot.activeSessionId)
             }
         }
+    }
+
+    private fun persistMemory() {
+        val snapshot = _uiState.value
+        viewModelScope.launch(Dispatchers.IO) {
+            persistMutex.withLock {
+                memoryStore.save(com.friday.assistant.data.MemorySnapshot(snapshot.personaConfig, snapshot.memories))
+            }
+        }
+    }
+
+    fun onPersonaPromptChange(value: String) {
+        _uiState.update { it.copy(personaConfig = it.personaConfig.copy(systemPrompt = value)) }
+        persistMemory()
+    }
+    fun resetPersonaPrompt() {
+        _uiState.update { it.copy(personaConfig = it.personaConfig.copy(systemPrompt = PersonaConfig.DEFAULT_PERSONA_PROMPT)) }
+        persistMemory()
+    }
+    fun onUseMemoriesChange(value: Boolean) {
+        _uiState.update { it.copy(personaConfig = it.personaConfig.copy(useMemories = value)) }
+        persistMemory()
+    }
+    fun addMemory(content: String) {
+        val text = content.trim()
+        if (text.isBlank()) return
+        _uiState.update { state ->
+            state.copy(memories = listOf(MemoryItem(content = text.take(1000))) + state.memories)
+        }
+        persistMemory()
+    }
+    fun updateMemory(id: String, content: String) {
+        val text = content.trim()
+        if (text.isBlank()) return
+        _uiState.update { state ->
+            state.copy(memories = state.memories.map { if (it.id == id) it.copy(content = text.take(1000), updatedAt = System.currentTimeMillis()) else it })
+        }
+        persistMemory()
+    }
+    fun deleteMemory(id: String) {
+        _uiState.update { state -> state.copy(memories = state.memories.filterNot { it.id == id }) }
+        persistMemory()
+    }
+    fun clearMemories() {
+        _uiState.update { it.copy(memories = emptyList()) }
+        persistMemory()
+    }
+
+    fun extractMemoriesFromCurrentChat() {
+        if (_uiState.value.isGenerating || _uiState.value.isMemoryBusy) return
+        val session = _uiState.value.activeSession ?: run {
+            _uiState.update { it.copy(memoryBusyMessage = "No active chat to extract memories from.") }
+            return
+        }
+        val transcript = session.messages
+            .filter { (it.role == ChatRole.USER || it.role == ChatRole.ASSISTANT) && it.content.isNotBlank() && it.content != "Thinking..." }
+            .takeLast(20)
+            .joinToString("\n") { m ->
+                val role = if (m.role == ChatRole.USER) "User" else "Assistant"
+                "$role: ${m.content.trim().take(700)}"
+            }
+        if (transcript.isBlank()) {
+            _uiState.update { it.copy(memoryBusyMessage = "Current chat has no messages to extract from.") }
+            return
+        }
+
+        val mode = _uiState.value.inferenceMode
+        val apiConfig = _uiState.value.apiConfig
+        val localStatus = _uiState.value.modelStatus
+        if (mode == InferenceMode.REMOTE_API && !apiConfig.isConfigured) {
+            _uiState.update { it.copy(memoryBusyMessage = "Configure Remote API in Settings to extract memories.") }
+            return
+        }
+        if (mode == InferenceMode.LOCAL && !localStatus.isReady) {
+            _uiState.update { it.copy(memoryBusyMessage = "Load a local model in Settings to extract memories.") }
+            return
+        }
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isMemoryBusy = true, memoryBusyMessage = "Extracting memories...") }
+            try {
+                val prompt = buildString {
+                    append("Extract durable, useful memories from this chat (user preferences, facts about the user, ongoing goals/projects, important context). ")
+                    append("Return ONLY a bullet list, one memory per line starting with '- '. ")
+                    append("No intro, no outro, no duplicates, max 8 items. If none, return '- (none)'.\n\n")
+                    append("Chat transcript:\n")
+                    append(transcript)
+                }
+                val extractionSystem = "You extract concise persistent memories from conversations. Output only bullet points."
+                val reply = when (mode) {
+                    InferenceMode.REMOTE_API -> apiService.generateReply(prompt, emptyList(), apiConfig, extractionSystem, emptyList())
+                    InferenceMode.LOCAL -> {
+                        var latest = ""
+                        localService.generateReply(prompt, emptyList(), extractionSystem, emptyList()).collect { latest = it }
+                        latest
+                    }
+                }
+                val parsed = parseExtractedMemories(reply)
+                if (parsed.isEmpty()) {
+                    _uiState.update { it.copy(isMemoryBusy = false, memoryBusyMessage = "No new memories extracted.") }
+                } else {
+                    val existing = _uiState.value.memories.map { it.content.trim().lowercase() }.toSet()
+                    val newItems = parsed.filterNot { existing.contains(it.trim().lowercase()) }
+                        .map { MemoryItem(content = it, source = "extracted") }
+                    _uiState.update { state ->
+                        state.copy(
+                            isMemoryBusy = false,
+                            memories = newItems + state.memories,
+                            memoryBusyMessage = if (newItems.isEmpty()) "No new memories added (duplicates)." else "Added ${newItems.size} memory item(s)."
+                        )
+                    }
+                    persistMemory()
+                }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(isMemoryBusy = false, memoryBusyMessage = "Memory extraction failed: ${e.message ?: "unknown error"}") }
+            }
+        }
+    }
+
+    private fun parseExtractedMemories(text: String): List<String> {
+        val lines = text.lineSequence().map { it.trim() }.toList()
+        val bullets = lines.mapNotNull { line ->
+            when {
+                line.startsWith("- ") -> line.removePrefix("- ").trim()
+                line.startsWith("* ") -> line.removePrefix("* ").trim()
+                Regex("^\\d+[.)]\\s+").containsMatchIn(line) -> line.replace(Regex("^\\d+[.)]\\s+"), "").trim()
+                else -> null
+            }
+        }.filter { it.isNotBlank() && !it.equals("(none)", ignoreCase = true) && !it.equals("none", ignoreCase = true) }
+            .map { it.take(300) }
+        if (bullets.isNotEmpty()) return bullets.distinct().take(8)
+        // fallback: take short non-empty lines if model didn't follow format
+        return lines.filter { it.isNotBlank() && it.length <= 200 && !it.equals("(none)", ignoreCase = true) }
+            .take(5).distinct()
     }
 
     fun newSession() {
@@ -402,6 +549,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         return (u.startsWith("http://") || u.startsWith("https://")) && u.length > 10
     }
 
+    private fun activeMemories(): List<String> = _uiState.value.let { s ->
+        if (s.personaConfig.useMemories) s.memories.map { it.content } else emptyList()
+    }
+
     private fun startGeneration(sessionId: String, prompt: String, history: List<ChatMessage>, assistantId: String) {
         val start = System.currentTimeMillis()
         val modeLabel = if (_uiState.value.inferenceMode == InferenceMode.REMOTE_API) "remote" else "local"
@@ -415,6 +566,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             val mode = _uiState.value.inferenceMode
             val apiConfig = _uiState.value.apiConfig
             val localStatus = _uiState.value.modelStatus
+            val persona = _uiState.value.personaConfig.systemPrompt
+            val memories = activeMemories()
             var first = true
             var chunks = 0
             try {
@@ -425,7 +578,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                         } else if (!isValidEndpointUrl(apiConfig.baseUrl)) {
                             appendToAssistant(sessionId, assistantId, "Remote API endpoint URL looks invalid. Use a full http(s) URL (e.g. https://api.example.com/v1).", done = true, error = true)
                         } else {
-                            val reply = apiService.generateReply(prompt, history, apiConfig)
+                            val reply = apiService.generateReply(prompt, history, apiConfig, persona, memories)
                             val now = System.currentTimeMillis()
                             chunks = 1
                             _uiState.update { it.copy(metrics = it.metrics.copy(firstTokenAtMs = it.metrics.firstTokenAtMs ?: now, finishedAtMs = now, outputChars = reply.length, chunkCount = chunks)) }
@@ -441,7 +594,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                                 if (text.isBlank() || text == "Thinking...") null else role to text
                             }
                         var latest = ""
-                        localService.generateReply(prompt, localHistory).collect { chunk ->
+                        localService.generateReply(prompt, localHistory, persona, memories).collect { chunk ->
                             latest = chunk // service emits accumulated text
                             chunks++
                             if (first && latest.isNotBlank()) {
