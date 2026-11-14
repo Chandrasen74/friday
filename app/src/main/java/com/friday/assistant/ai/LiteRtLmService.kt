@@ -100,25 +100,12 @@ class LiteRtLmService(private val appContext: Context) {
             return@callbackFlow
         }
 
-        val fullPrompt = buildString {
-            val recent = history.takeLast(6)
-            if (recent.isNotEmpty()) {
-                append("Previous conversation:\n")
-                recent.forEach { (role, text) ->
-                    val clean = text.trim().take(800)
-                    if (clean.isNotEmpty()) {
-                        append(role).append(": ").append(clean).append("\n")
-                    }
-                }
-                append("\n")
-            }
-            append("User: ").append(prompt.trim())
-        }
+        val userPrompt = prompt.trim().ifBlank { prompt }
 
         val buffer = StringBuilder()
         try {
             conv.sendMessageAsync(
-                fullPrompt,
+                userPrompt,
                 object : MessageCallback {
                     override fun onMessage(message: Message) {
                         if (completed.get()) return
