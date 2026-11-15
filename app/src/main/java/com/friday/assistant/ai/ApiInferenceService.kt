@@ -1,6 +1,7 @@
 ﻿package com.friday.assistant.ai
 
 import android.content.Context
+import android.util.Log
 import com.friday.assistant.data.ApiEndpointConfig
 import com.friday.assistant.data.ChatMessage
 import com.friday.assistant.data.ChatRole
@@ -43,6 +44,8 @@ class ApiInferenceService(private val appContext: Context) {
         memories: List<String> = emptyList()
     ): String = withContext(Dispatchers.IO) {
         val endpoint = resolveEndpoint(config.baseUrl)
+        Log.i("FRIDAY", "API: POST $endpoint model=${config.model.ifBlank { "(default)" }} history=${history.size}")
+        val apiStart = System.currentTimeMillis()
         val url = URL(endpoint)
         val conn = (url.openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
@@ -66,9 +69,12 @@ class ApiInferenceService(private val appContext: Context) {
             val stream = if (code in 200..299) conn.inputStream else (conn.errorStream ?: conn.inputStream)
             val text = stream.bufferedReader().use(BufferedReader::readText)
             if (code !in 200..299) {
+                Log.w("FRIDAY", "API: HTTP $code error=${extractError(text).take(200)}")
                 error("API $code: ${extractError(text)}")
             }
-            parseResponse(text)
+            val reply = parseResponse(text)
+            Log.i("FRIDAY", "API: HTTP $code reply ${reply.length} chars in ${System.currentTimeMillis() - apiStart} ms")
+            reply
         } finally {
             conn.disconnect()
         }

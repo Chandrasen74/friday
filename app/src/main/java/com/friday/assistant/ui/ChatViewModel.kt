@@ -1,6 +1,7 @@
 ﻿package com.friday.assistant.ui
 
 import android.app.Application
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.friday.assistant.ai.ApiInferenceService
@@ -16,6 +17,9 @@ import com.friday.assistant.data.MemoryItem
 import com.friday.assistant.data.MemoryStore
 import com.friday.assistant.data.ModelStatus
 import com.friday.assistant.data.PersonaConfig
+import com.friday.assistant.data.RecommendedModel
+import com.friday.assistant.data.RecommendedModels
+import com.friday.assistant.speech.TtsService
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -27,6 +31,21 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.util.concurrent.atomic.AtomicLong
+
+data class DiagnosticsInfo(
+    val device: String = "",
+    val androidVersion: String = "",
+    val abi: String = "",
+    val appVersion: String = "",
+    val inferenceMode: String = "",
+    val modelFile: String = "",
+    val modelLoadMs: Long? = null,
+    val lastGenerationMs: Long? = null,
+    val lastGenerationError: String? = null,
+    val sessionCount: Int = 0,
+    val messageCount: Int = 0,
+    val ttsReady: Boolean = false
+)
 
 data class ChatUiState(
     val sessions: List<ChatSession> = emptyList(),
@@ -50,7 +69,11 @@ data class ChatUiState(
     val personaConfig: PersonaConfig = PersonaConfig(),
     val memories: List<MemoryItem> = emptyList(),
     val memoryBusyMessage: String? = null,
-    val isMemoryBusy: Boolean = false
+    val isMemoryBusy: Boolean = false,
+    val speakReplies: Boolean = false,
+    val speakingMessageId: String? = null,
+    val recommendedModels: List<RecommendedModel> = RecommendedModels.CATALOG,
+    val diagnostics: DiagnosticsInfo = DiagnosticsInfo()
 ) {
     val activeSession: ChatSession?
         get() = sessions.firstOrNull { it.id == activeSessionId } ?: sessions.firstOrNull()
@@ -62,9 +85,14 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private val apiService = ApiInferenceService(application.applicationContext)
     private val chatStore = ChatStore(application.applicationContext)
     private val memoryStore = MemoryStore(application.applicationContext)
+    private val tts = TtsService(application.applicationContext)
     private var generationJob: Job? = null
     private val generationId = AtomicLong(0L)
     @Volatile private var activeGenerationId: Long = 0L
+    @Volatile private var lastGenerationError: String? = null
+    @Volatile private var lastGenerationMs: Long? = null
+    @Volatile private var lastModelLoadMs: Long? = null
+    @Volatile private var speakingMessageId: String? = null
 
     private val _uiState = MutableStateFlow(ChatUiState())
     val uiState: StateFlow<ChatUiState> = _uiState.asStateFlow()
@@ -75,6 +103,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             .getOrDefault(InferenceMode.LOCAL)
         val savedPathPref = appPrefs.getString("model_path", "") ?: ""
         val savedUseGpu = appPrefs.getBoolean("use_gpu", false)
+        val savedSpeakReplies = appPrefs.getBoolean("speak_replies", false)
         val (savedSessions, savedActiveId) = chatStore.load()
         val memorySnapshot = memoryStore.load()
         val sessions = if (savedSessions.isNotEmpty()) {
@@ -83,6 +112,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             emptyList()
         }
         val activeId = sessions.firstOrNull { it.id == savedActiveId }?.id ?: sessions.firstOrNull()?.id.orEmpty()
+        Log.i("FRIDAY", "VM: init mode=${savedMode.name} speakReplies=$savedSpeakReplies sessions=${sessions.size}")
         _uiState.value = ChatUiState(
             sessions = sessions,
             activeSessionId = activeId,
@@ -92,8 +122,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             modelPathInput = savedPathPref,
             useGpu = savedUseGpu,
             personaConfig = memorySnapshot.persona,
-            memories = memorySnapshot.memories
+            memories = memorySnapshot.memories,
+            speakReplies = savedSpeakReplies
         )
+        pushDiagnostics()
+        tts.onSpeakingChanged = { speaking -> if (!speaking) setSpeakingMessage(null) }
         viewModelScope.launch {
             val discovered = LiteRtLmService.discoverDefaultModelPath(getApplication<Application>().applicationContext).orEmpty()
             val chosen = savedPathPref.ifBlank { discovered }
@@ -101,7 +134,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             refreshAvailableModels()
             if (chosen.isNotBlank()) {
                 _uiState.update { it.copy(modelStatus = localService.currentStatus(configuredPath = chosen, loading = true)) }
+                val t0 = System.currentTimeMillis()
                 val result = localService.loadModel(chosen, savedUseGpu)
+                lastModelLoadMs = System.currentTimeMillis() - t0
+                Log.i("FRIDAY", "MODEL: startup load ${result.fold(onSuccess = { "ok" }, onFailure = { "failed: ${it.message}" })} in $lastModelLoadMs ms (${chosen.substringAfterLast('/')})")
                 _uiState.update { state ->
                     state.copy(
                         modelStatus = result.getOrElse { e ->
@@ -112,11 +148,15 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             } else {
                 _uiState.update { it.copy(modelStatus = ModelStatus(statusText = "No local model loaded")) }
             }
+            pushDiagnostics()
         }
     }
 
     fun onInputChange(value: String) { _uiState.update { it.copy(input = value) } }
-    fun toggleSettings(open: Boolean) { _uiState.update { it.copy(settingsOpen = open, chatsStorageOpen = if (open) it.chatsStorageOpen else false, personaMemoryOpen = if (open) it.personaMemoryOpen else false) } }
+    fun toggleSettings(open: Boolean) {
+        _uiState.update { it.copy(settingsOpen = open, chatsStorageOpen = if (open) it.chatsStorageOpen else false, personaMemoryOpen = if (open) it.personaMemoryOpen else false) }
+        if (open) pushDiagnostics()
+    }
     fun openChatsStorage(open: Boolean) { _uiState.update { it.copy(chatsStorageOpen = open, personaMemoryOpen = false, settingsOpen = if (open) true else it.settingsOpen) } }
     fun openPersonaMemory(open: Boolean) { _uiState.update { it.copy(personaMemoryOpen = open, chatsStorageOpen = false, settingsOpen = if (open) true else it.settingsOpen) } }
 
@@ -137,9 +177,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun downloadModel() {
-        val url = _uiState.value.modelDownloadUrl.trim()
+    fun downloadModel(urlOverride: String? = null) {
+        val url = (urlOverride ?: _uiState.value.modelDownloadUrl).trim()
         if (url.isBlank()) return
+        Log.i("FRIDAY", "DL: start ${url.substringAfterLast('/')}")
         viewModelScope.launch {
             _uiState.update { it.copy(busyMessage = "Downloading model...") }
             val res = LiteRtLmService.downloadModel(getApplication(), url)
@@ -147,7 +188,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 val msg = res.fold(onSuccess = { "Downloaded: ${it.substringAfterLast('/')}" }, onFailure = { "Download failed: ${it.message}" })
                 state.copy(busyMessage = msg, modelPathInput = res.getOrNull() ?: state.modelPathInput)
             }
+            Log.i("FRIDAY", "DL: ${res.fold(onSuccess = { "done ${it.substringAfterLast('/')}" }, onFailure = { "failed: ${it.message}" })}")
             refreshAvailableModels()
+            pushDiagnostics()
         }
     }
 
@@ -166,6 +209,61 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     fun onUseGpuChange(value: Boolean) {
         _uiState.update { it.copy(useGpu = value) }
         appPrefs.edit().putBoolean("use_gpu", value).apply()
+    }
+
+    fun onSpeakRepliesChange(value: Boolean) {
+        _uiState.update { it.copy(speakReplies = value) }
+        appPrefs.edit().putBoolean("speak_replies", value).apply()
+        if (!value) {
+            tts.stop()
+            setSpeakingMessage(null)
+        }
+        Log.i("FRIDAY", "TTS: speakReplies=$value")
+    }
+
+    fun speakMessage(messageId: String) {
+        val msg = _uiState.value.activeSession?.messages?.firstOrNull { it.id == messageId } ?: return
+        val text = msg.content.trim()
+        if (text.isBlank()) return
+        if (tts.isSpeaking() && speakingMessageId == messageId) {
+            Log.i("FRIDAY", "TTS: stopped from speaker icon")
+            tts.stop()
+            setSpeakingMessage(null)
+            return
+        }
+        Log.i("FRIDAY", "TTS: speak message ${text.length} chars")
+        setSpeakingMessage(messageId)
+        tts.speak(text)
+    }
+
+    private fun setSpeakingMessage(messageId: String?) {
+        speakingMessageId = messageId
+        _uiState.update { it.copy(speakingMessageId = messageId) }
+    }
+
+    private fun buildDiagnostics(): DiagnosticsInfo {
+        val s = _uiState.value
+        val app = getApplication<Application>()
+        val pkg = runCatching { app.packageManager.getPackageInfo(app.packageName, 0) }.getOrNull()
+        val versionCode = if (android.os.Build.VERSION.SDK_INT >= 28) pkg?.longVersionCode ?: 0L else (pkg?.versionCode ?: 0).toLong()
+        return DiagnosticsInfo(
+            device = "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}",
+            androidVersion = "Android ${android.os.Build.VERSION.RELEASE} (API ${android.os.Build.VERSION.SDK_INT})",
+            abi = android.os.Build.SUPPORTED_ABIS.firstOrNull().orEmpty(),
+            appVersion = "${pkg?.versionName ?: "?"} (versionCode $versionCode)",
+            inferenceMode = if (s.inferenceMode == InferenceMode.REMOTE_API) "Remote API" else "Local (LiteRT-LM)",
+            modelFile = s.modelStatus.resolvedPath?.substringAfterLast('/') ?: s.modelPathInput.substringAfterLast('/'),
+            modelLoadMs = lastModelLoadMs,
+            lastGenerationMs = lastGenerationMs,
+            lastGenerationError = lastGenerationError,
+            sessionCount = s.sessions.size,
+            messageCount = s.sessions.sumOf { it.messages.size },
+            ttsReady = tts.isReady()
+        )
+    }
+
+    private fun pushDiagnostics() {
+        _uiState.update { it.copy(diagnostics = buildDiagnostics()) }
     }
 
     private fun updateApi(transform: (ApiEndpointConfig) -> ApiEndpointConfig) {
@@ -338,6 +436,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             state.copy(sessions = listOf(session) + state.sessions, activeSessionId = session.id, input = "", settingsOpen = false, chatsStorageOpen = false, editingMessageId = null)
         }
         persistChats()
+        pushDiagnostics()
+        if (_uiState.value.speakReplies) {
+            setSpeakingMessage(session.messages.first().id)
+            tts.speak("New session started. How can I help?")
+        }
     }
 
     fun selectSession(id: String) {
@@ -358,6 +461,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
         persistChats()
+        pushDiagnostics()
     }
 
     fun loadModel() {
@@ -368,7 +472,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         }
         viewModelScope.launch {
             _uiState.update { it.copy(modelStatus = localService.currentStatus(configuredPath = path, loading = true)) }
+            val t0 = System.currentTimeMillis()
             val result = localService.loadModel(path, _uiState.value.useGpu)
+            lastModelLoadMs = System.currentTimeMillis() - t0
+            Log.i("FRIDAY", "MODEL: ${result.fold(onSuccess = { "loaded" }, onFailure = { "failed: ${it.message}" })} in $lastModelLoadMs ms (${path.substringAfterLast('/')})")
             _uiState.update { state ->
                 state.copy(
                     modelStatus = result.getOrElse { e ->
@@ -376,6 +483,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 )
             }
+            pushDiagnostics()
         }
     }
 
@@ -388,7 +496,12 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun cancelActiveGeneration(markStopped: Boolean) {
         val prevId = activeGenerationId
-        if (prevId != 0L) activeGenerationId = 0L
+        if (prevId != 0L) {
+            activeGenerationId = 0L
+            Log.i("FRIDAY", "GEN: cancelled by user")
+            tts.stop()
+            setSpeakingMessage(null)
+        }
         generationJob?.cancel()
         generationJob = null
         if (markStopped) {
@@ -461,6 +574,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             })
         }
         persistChats()
+        pushDiagnostics()
+        if (_uiState.value.speakReplies) {
+            _uiState.value.activeSession?.messages?.firstOrNull()?.id?.let { setSpeakingMessage(it) }
+            tts.speak("Chat cleared. How can I help?")
+        }
     }
 
     fun clearAllChats() {
@@ -472,6 +590,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 chatStore.clear()
             }
         }
+        pushDiagnostics()
     }
 
     fun exportChatsJson(): String {
@@ -498,6 +617,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             )
         }
         persistChats()
+        pushDiagnostics()
         return true
     }
 
@@ -601,6 +721,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             _uiState.value.modelStatus.resolvedPath?.substringAfterLast('/') ?: "local-model"
         }
         _uiState.update { it.copy(metrics = GenerationMetrics(startedAtMs = start, modelName = modelName, mode = modeLabel)) }
+        Log.i("FRIDAY", "GEN: start mode=$modeLabel model=$modelName history=${history.size}")
         generationJob = viewModelScope.launch {
             val mode = _uiState.value.inferenceMode
             val apiConfig = _uiState.value.apiConfig
@@ -625,6 +746,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                                 _uiState.update { it.copy(metrics = it.metrics.copy(firstTokenAtMs = it.metrics.firstTokenAtMs ?: now, finishedAtMs = now, outputChars = reply.length, chunkCount = chunks)) }
                             }
                             appendToAssistant(sessionId, assistantId, reply.ifBlank { "(empty response)" }, done = true, error = false)
+                            maybeSpeakReply(reply, assistantId)
                         }
                     }
                     localStatus.isReady -> {
@@ -655,6 +777,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                             _uiState.update { it.copy(metrics = it.metrics.copy(finishedAtMs = System.currentTimeMillis(), outputChars = latest.length, chunkCount = chunks)) }
                         }
                         appendToAssistant(sessionId, assistantId, latest.ifBlank { "(empty response)" }, done = true, error = false)
+                        maybeSpeakReply(latest, assistantId)
                     }
                     else -> {
                         val fallback = buildFallbackReply(prompt, localStatus, apiConfig)
@@ -684,6 +807,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             } catch (e: Exception) {
                 if (isActiveGeneration(myId)) {
                     val msg = "Error: ${e.message ?: "generation failed"}"
+                    lastGenerationError = e.message ?: "generation failed"
+                    Log.w("FRIDAY", "GEN: error: ${e.message}")
                     _uiState.update { state ->
                         if (isActiveGeneration(myId)) state.copy(metrics = state.metrics.copy(finishedAtMs = System.currentTimeMillis(), outputChars = msg.length, chunkCount = chunks)) else state
                     }
@@ -695,6 +820,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     generationJob = null
                     _uiState.update { it.copy(isGenerating = false) }
                     persistChats()
+                }
+                if (isActiveGeneration(myId) || terminalHandled) {
+                    lastGenerationMs = System.currentTimeMillis() - start
+                    Log.i("FRIDAY", "GEN: finished in $lastGenerationMs ms chunks=$chunks")
+                    pushDiagnostics()
                 }
             }
         }
@@ -716,6 +846,14 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             )
         }
         // persistence on completion is handled by generation flow for the active generation; avoid duplicate/stale writes from old jobs
+    }
+
+    private fun maybeSpeakReply(text: String, messageId: String? = null) {
+        if (!_uiState.value.speakReplies) return
+        val clean = text.trim()
+        if (clean.isBlank() || clean.startsWith("(stopped") || clean.startsWith("(empty")) return
+        setSpeakingMessage(messageId)
+        tts.speak(clean)
     }
 
     private fun buildFallbackReply(prompt: String, status: ModelStatus, api: ApiEndpointConfig): String {
@@ -740,6 +878,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
 
     override fun onCleared() {
         cancelActiveGeneration(markStopped = false)
+        tts.shutdown()
         try {
             kotlinx.coroutines.runBlocking { localService.unload() }
         } catch (_: Exception) {

@@ -1,5 +1,8 @@
 package com.friday.assistant.ui
 
+import android.content.ActivityNotFoundException
+import android.content.Intent
+import android.speech.RecognizerIntent
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -41,11 +44,14 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.automirrored.filled.VolumeOff
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SmartToy
@@ -117,6 +123,28 @@ fun FridayApp(viewModel: ChatViewModel) {
     val scope = rememberCoroutineScope()
     val keyboardController = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
+    val context = LocalContext.current
+
+    val speechLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == android.app.Activity.RESULT_OK) {
+            val spoken = result.data
+                ?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
+                ?.firstOrNull()
+                .orEmpty()
+            if (spoken.isNotBlank()) viewModel.onInputChange(spoken)
+        }
+    }
+    fun launchSpeechInput() {
+        try {
+            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                putExtra(RecognizerIntent.EXTRA_PROMPT, "Speak to F.R.I.D.A.Y")
+            }
+            speechLauncher.launch(intent)
+        } catch (e: ActivityNotFoundException) {
+            Toast.makeText(context, "Speech recognition not available on this device", Toast.LENGTH_SHORT).show()
+        }
+    }
 
     BackHandler(enabled = drawerState.isOpen || state.settingsOpen || state.chatsStorageOpen || state.personaMemoryOpen) {
         when {
@@ -198,7 +226,9 @@ fun FridayApp(viewModel: ChatViewModel) {
                     onApiKeyChange = viewModel::onApiKeyChange,
                     onApiModelChange = viewModel::onApiModelChange,
                     onModelDownloadUrlChange = viewModel::onModelDownloadUrlChange,
-                    onDownloadModel = viewModel::downloadModel,
+                    onDownloadModel = { viewModel.downloadModel() },
+                    onSpeakRepliesChange = viewModel::onSpeakRepliesChange,
+                    onDownloadRecommended = { viewModel.downloadModel(it) },
                     onTestApi = viewModel::testApiEndpoint,
                     onRefreshModels = viewModel::refreshAvailableModels
                 )
@@ -216,7 +246,9 @@ fun FridayApp(viewModel: ChatViewModel) {
                     onSend = viewModel::sendMessage,
                     onStop = viewModel::stopGeneration,
                     onRegenerate = viewModel::regenerateLastResponse,
-                    onEditMessage = viewModel::startEditMessage
+                    onEditMessage = viewModel::startEditMessage,
+                    onMic = { launchSpeechInput() },
+                    onSpeakMessage = viewModel::speakMessage
                 )
             }
         }
@@ -404,7 +436,9 @@ private fun ChatScreen(
     onSend: () -> Unit,
     onStop: () -> Unit,
     onRegenerate: () -> Unit,
-    onEditMessage: (String) -> Unit
+    onEditMessage: (String) -> Unit,
+    onMic: () -> Unit,
+    onSpeakMessage: (String) -> Unit
 ) {
     val session = state.activeSession
     val listState = remember(session?.id) { androidx.compose.foundation.lazy.LazyListState() }
@@ -423,7 +457,7 @@ private fun ChatScreen(
 
     LaunchedEffect(session?.id) {
         if (messages.isNotEmpty()) {
-            listState.scrollToItem(messages.lastIndex)
+            listState.scrollToItem(messages.size + 1)
         }
         prevMessageCount = messages.size
     }
@@ -432,14 +466,14 @@ private fun ChatScreen(
         if (messages.isEmpty()) {
             prevMessageCount = 0
         } else if (messages.size != prevMessageCount) {
-            listState.animateScrollToItem(messages.lastIndex)
+            listState.animateScrollToItem(messages.size + 1)
             prevMessageCount = messages.size
         }
     }
 
     LaunchedEffect(messages.lastOrNull()?.id, messages.lastOrNull()?.content, messages.lastOrNull()?.isStreaming) {
         if (messages.isNotEmpty() && isNearBottom) {
-            listState.scrollToItem(messages.lastIndex)
+            listState.scrollToItem(messages.size + 1)
         }
     }
 
@@ -474,8 +508,18 @@ private fun ChatScreen(
                             state.modelStatus.isReady -> "LiteRT-LM local"
                             else -> "Local fallback"
                         }
+                        val modelLabel = state.metrics.modelName.ifBlank {
+                            state.modelStatus.resolvedPath?.substringAfterLast('/') ?: ""
+                        }.removeSuffix(".litertlm")
                         Text(
-                            text = "$mode | ${formatMetrics(state.metrics, state.isGenerating)}",
+                            text = "$mode | ${modelLabel.ifBlank { "no model" }}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            text = formatMetrics(state.metrics, state.isGenerating),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 2,
@@ -501,7 +545,8 @@ private fun ChatScreen(
                     isGenerating = state.isGenerating,
                     onValueChange = onInputChange,
                     onSend = onSend,
-                    onStop = onStop
+                    onStop = onStop,
+                    onMic = onMic
                 )
             }
         }
@@ -560,7 +605,9 @@ private fun ChatScreen(
                             clipboard.setText(AnnotatedString(msg.content))
                             Toast.makeText(context, "Copied", Toast.LENGTH_SHORT).show()
                         },
-                        onEdit = if (msg.role == ChatRole.USER && !state.isGenerating) { { onEditMessage(msg.id); Toast.makeText(context, "Editing message", Toast.LENGTH_SHORT).show() } } else null
+                        onEdit = if (msg.role == ChatRole.USER && !state.isGenerating) { { onEditMessage(msg.id); Toast.makeText(context, "Editing message", Toast.LENGTH_SHORT).show() } } else null,
+                        onSpeak = if (msg.role == ChatRole.ASSISTANT && !msg.isError && !msg.isStreaming && msg.content.isNotBlank()) { { onSpeakMessage(msg.id) } } else null,
+                        speaking = state.speakingMessageId == msg.id
                     )
                 }
                 item { Spacer(Modifier.height(12.dp)) }
@@ -571,7 +618,7 @@ private fun ChatScreen(
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun MessageRow(message: ChatMessage, onCopy: () -> Unit, onEdit: (() -> Unit)? = null) {
+private fun MessageRow(message: ChatMessage, onCopy: () -> Unit, onEdit: (() -> Unit)? = null, onSpeak: (() -> Unit)? = null, speaking: Boolean = false) {
     val isUser = message.role == ChatRole.USER
     Row(
         modifier = Modifier
@@ -628,6 +675,15 @@ private fun MessageRow(message: ChatMessage, onCopy: () -> Unit, onEdit: (() -> 
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(14.dp).clickable { onCopy() }
                         )
+                        if (onSpeak != null) {
+                            Spacer(Modifier.width(8.dp))
+                            Icon(
+                                if (speaking) Icons.AutoMirrored.Filled.VolumeUp else Icons.AutoMirrored.Filled.VolumeOff,
+                                contentDescription = if (speaking) "Stop speaking" else "Speak",
+                                tint = if (speaking) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(14.dp).clickable { onSpeak() }
+                            )
+                        }
                     }
                 }
                 Spacer(Modifier.height(4.dp))
@@ -668,9 +724,22 @@ private fun formatMetrics(m: GenerationMetrics, generating: Boolean): String {
     val cps = m.charsPerSec?.let { String.format(Locale.US, "%.1f ch/s", it) }
     val out = if (m.outputChars > 0) "${m.outputChars} chars (~${m.estimatedTokens} tok)" else null
     val chunks = if (m.chunkCount > 0) "${m.chunkCount} chunks" else null
-    val model = m.modelName.takeIf { it.isNotBlank() }
-    val parts = listOfNotNull(if (generating) "generating" else null, model, ttft, total, tps, cps, out, chunks)
+    val parts = listOfNotNull(if (generating) "generating" else null, ttft, total, tps, cps, out, chunks)
     return if (parts.isEmpty()) "ready" else parts.joinToString(" | ")
+}
+
+private fun formatDiagnostics(d: DiagnosticsInfo): String = buildString {
+    appendLine("Device: ${d.device}")
+    appendLine("OS: ${d.androidVersion}")
+    appendLine("ABI: ${d.abi}")
+    appendLine("App: v${d.appVersion}")
+    appendLine("Mode: ${d.inferenceMode}")
+    appendLine("Model: ${d.modelFile.ifBlank { "(none)" }}")
+    d.modelLoadMs?.let { appendLine("Last model load: $it ms") }
+    d.lastGenerationMs?.let { appendLine("Last generation: $it ms") }
+    d.lastGenerationError?.let { appendLine("Last error: $it") }
+    appendLine("Sessions: ${d.sessionCount} (${d.messageCount} messages)")
+    appendLine("TTS: ${if (d.ttsReady) "ready" else "unavailable"}")
 }
 
 @Composable
@@ -679,7 +748,8 @@ private fun ComposerBar(
     isGenerating: Boolean,
     onValueChange: (String) -> Unit,
     onSend: () -> Unit,
-    onStop: () -> Unit
+    onStop: () -> Unit,
+    onMic: () -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -738,6 +808,22 @@ private fun ComposerBar(
                     )
                 }
             } else {
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                        .clickable { onMic() },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Default.Mic,
+                        contentDescription = "Speak input",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+                Spacer(Modifier.width(8.dp))
                 val canSend = value.isNotBlank()
                 Box(
                     modifier = Modifier
@@ -775,9 +861,13 @@ private fun SettingsScreen(
     onApiModelChange: (String) -> Unit,
     onModelDownloadUrlChange: (String) -> Unit,
     onDownloadModel: () -> Unit,
+    onSpeakRepliesChange: (Boolean) -> Unit,
+    onDownloadRecommended: (String) -> Unit,
     onTestApi: () -> Unit,
     onRefreshModels: () -> Unit
 ) {
+    val clipboard = LocalClipboardManager.current
+    val context = LocalContext.current
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
@@ -911,6 +1001,60 @@ private fun SettingsScreen(
                     }
                 }
                 item {
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    Spacer(Modifier.height(8.dp))
+                    Text("Recommended models", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface)
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "Curated .litertlm models that fit this phone class. Download once, then tap a row to select it.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    state.recommendedModels.forEach { rec ->
+                        val installedPath = state.availableModels.firstOrNull { it.substringAfterLast('/').equals(rec.fileName, ignoreCase = true) }
+                        val selected = installedPath != null && state.modelPathInput == installedPath
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 6.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(MaterialTheme.colorScheme.surface)
+                                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp))
+                                .clickable(enabled = installedPath != null) { installedPath?.let(onPathChange) }
+                                .padding(12.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(rec.displayName, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.labelLarge)
+                                    Text(
+                                        "${rec.sizeLabel} | ${rec.fileName}",
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                                Text(
+                                    when {
+                                        selected -> "Selected"
+                                        installedPath != null -> "Installed"
+                                        else -> "Not installed"
+                                    },
+                                    color = if (installedPath != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    style = MaterialTheme.typography.labelSmall
+                                )
+                            }
+                            Spacer(Modifier.height(4.dp))
+                            Text(rec.description, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                            if (installedPath == null) {
+                                Spacer(Modifier.height(8.dp))
+                                ActionButton("Download model (${rec.sizeLabel})", primary = true, enabled = !state.modelStatus.isLoading) { onDownloadRecommended(rec.url) }
+                            }
+                        }
+                    }
+                }
+                item {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
@@ -941,6 +1085,28 @@ private fun SettingsScreen(
             item {
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 Spacer(Modifier.height(4.dp))
+                Text("Voice & speech", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface)
+                Spacer(Modifier.height(6.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Speak replies aloud", color = MaterialTheme.colorScheme.onSurface)
+                        Text(
+                            "Reads assistant replies and session greetings with on-device text-to-speech. Tap the speaker icon on a reply to hear it on demand.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(checked = state.speakReplies, onCheckedChange = onSpeakRepliesChange)
+                }
+            }
+
+            item {
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                Spacer(Modifier.height(4.dp))
                 Text("Persona & memory", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface)
                 Spacer(Modifier.height(6.dp))
                 Text("Configure F.R.I.D.A.Y's behavior prompt and manage persistent memories used across chats.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -956,6 +1122,39 @@ private fun SettingsScreen(
                 Text("Manage sessions, rename chats, import/export, and clear stored history in a separate section.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(Modifier.height(10.dp))
                 ActionButton("Open Chats & storage", primary = true, enabled = true) { onOpenChatsStorage() }
+            }
+
+            item {
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                Spacer(Modifier.height(4.dp))
+                Text("Diagnostics", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface)
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    "Snapshot of device, model, and last generation state. Copy it into a bug report.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(8.dp))
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.surface)
+                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(12.dp))
+                        .padding(12.dp)
+                ) {
+                    Text(
+                        formatDiagnostics(state.diagnostics),
+                        style = MaterialTheme.typography.bodySmall,
+                        fontFamily = FontFamily.Monospace,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+                Spacer(Modifier.height(8.dp))
+                ActionButton("Copy diagnostics", primary = false, enabled = true) {
+                    clipboard.setText(AnnotatedString(formatDiagnostics(state.diagnostics)))
+                    Toast.makeText(context, "Diagnostics copied", Toast.LENGTH_SHORT).show()
+                }
             }
         }
     }

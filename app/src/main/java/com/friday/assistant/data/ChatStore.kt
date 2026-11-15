@@ -1,6 +1,7 @@
 ﻿package com.friday.assistant.data
 
 import android.content.Context
+import android.util.Log
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -25,7 +26,8 @@ class ChatStore(context: Context) {
                 runCatching { save(parsed.first, parsed.second ?: parsed.first.first().id) }
             }
             parsed
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            Log.w("FRIDAY", "STORE: failed to load chats: ${e.message}")
             emptyList<ChatSession>() to null
         }
     }
@@ -41,7 +43,8 @@ class ChatStore(context: Context) {
                 tmp.delete()
             }
             true
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            Log.w("FRIDAY", "STORE: failed to save chats: ${e.message}")
             false
         }
     }
@@ -58,7 +61,8 @@ class ChatStore(context: Context) {
         return try {
             if (json.length > 5_000_000) return emptyList<ChatSession>() to null
             parseSessionsJson(json)
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            Log.w("FRIDAY", "STORE: failed to parse import: ${e.message}")
             emptyList<ChatSession>() to null
         }
     }
