@@ -17,8 +17,10 @@
 
 ## Download
 
-- [friday-v0.9.0-debug.apk](https://github.com/Chandrasen74/friday/releases/download/v0.9.0/friday-v0.9.0-debug.apk) (~1.5 GB): prebuilt debug APK with all models bundled for fully offline use.
-- All releases: [GitHub Releases](https://github.com/Chandrasen74/friday/releases)
+<p align="left">
+  <a href="https://github.com/Chandrasen74/friday/releases/download/v0.9.0/friday-v0.9.0-debug.apk"><img src="https://img.shields.io/badge/download-v0.9.0%20APK%20(~1.5%20GB)-3DDC84?logo=android&logoColor=white" alt="Download v0.9.0 APK" /></a>
+  <a href="https://github.com/Chandrasen74/friday/releases"><img src="https://img.shields.io/badge/all%20releases-GitHub-181717?logo=github&logoColor=white" alt="All releases" /></a>
+</p>
 
 The APK is large because it bundles Qwen3-0.6B and Granite 4.0 350M (int8 and fp16). No model download is required after install.
 
@@ -31,8 +33,6 @@ F.R.I.D.A.Y is an on-device-first personal assistant for Android inspired by Ton
 | Chat | Sessions drawer | Conversation | Settings |
 | --- | --- | --- | --- |
 | ![F.R.I.D.A.Y chat](screenshots/demo-chat.png) | ![F.R.I.D.A.Y sessions drawer](screenshots/demo-drawer.png) | ![F.R.I.D.A.Y coding help conversation](screenshots/demo-chat2.png) | ![F.R.I.D.A.Y settings](screenshots/demo-settings.png) |
-
-An interactive HTML demo is available at [friday-demo.html](friday-demo.html) (open in a browser, use `?view=chat|drawer|chat2|settings|empty` to switch views).
 
 ## Features
 
