@@ -30,8 +30,8 @@ android {
         applicationId = "com.friday.assistant"
         minSdk = 26
         targetSdk = 35
-        versionCode = 34
-        versionName = "0.8.6"
+        versionCode = 35
+        versionName = "0.8.7"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -126,6 +126,7 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 }
+
 
 
 
