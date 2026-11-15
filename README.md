@@ -25,7 +25,7 @@ An interactive HTML demo is available at [friday-demo.html](friday-demo.html) (o
 - **Voice input:** microphone button composes prompts with on-device speech recognition, with a toast fallback when no speech service is available.
 - **Spoken replies (TTS):** optional "Speak replies" setting reads assistant responses aloud; each reply has a speaker toggle to play or stop it.
 - **Sessions and storage:** local chat persistence (`filesDir`), create/select/delete sessions, rename sessions, clear current/all chats, and export/import chats as JSON.
-- **Model manager:** view model status/path, list/refresh available models, download model by URL or from a curated recommended list (bundled Qwen3-0.6B default, Gemma 3 270M and 1B options), load/unload/switch local model.
+- **Model manager:** view model status/path, list/refresh available models, download model by URL or from a curated recommended list (bundled Qwen3-0.6B default, IBM Granite 4.0 350M int8/fp16 options), load/unload/switch local model.
 - **Diagnostics:** in-app card with device, OS, ABI, app version, inference mode, model, last model-load and generation times, session/message counts, and TTS status, plus one-tap copy.
 - **UI:** edge-to-edge/status and display-cutout aware layout, drawer navigation, settings and separate Chats & storage screens, splash/branding with F.R.I.D.A.Y identity.
 
