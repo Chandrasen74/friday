@@ -6,8 +6,21 @@
 
 <p align="center">Local-first Android assistant app built with Kotlin and Jetpack Compose.</p>
 
+<p align="center">
+  <a href="https://github.com/Chandrasen74/friday/releases/tag/v0.9.0"><img src="https://img.shields.io/github/v/release/Chandrasen74/friday?label=release" alt="Release" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-All%20Rights%20Reserved-lightgrey" alt="License" /></a>
+  <img src="https://img.shields.io/badge/platform-Android%208.0%2B%20(API%2026)-3DDC84?logo=android&logoColor=white" alt="Android 8.0+" />
+</p>
+
 **Repository:** https://github.com/Chandrasen74/friday  
 **Current version:** v0.9.0 (versionCode 36, `com.friday.assistant`, minSdk 26, target/compile SDK 35)
+
+## Download
+
+- [friday-v0.9.0-debug.apk](https://github.com/Chandrasen74/friday/releases/download/v0.9.0/friday-v0.9.0-debug.apk) (~1.5 GB): prebuilt debug APK with all models bundled for fully offline use.
+- All releases: [GitHub Releases](https://github.com/Chandrasen74/friday/releases)
+
+The APK is large because it bundles Qwen3-0.6B and Granite 4.0 350M (int8 and fp16). No model download is required after install.
 
 ## Description
 
@@ -61,6 +74,15 @@ From `app/build.gradle.kts`:
 - `com.mikepenz:multiplatform-markdown-renderer-m3:0.27.0` (markdown rendering)
 - Debug: `androidx.compose.ui:ui-tooling`, `androidx.compose.ui:ui-test-manifest`
 
+## Requirements and first launch
+
+- **Device:** Android 8.0+ (API 26+). Local inference is CPU-bound; performance depends on your hardware.
+- **Storage:** the v0.9.0 APK is ~1.5 GB. On first launch the app copies ~1.1 GB of bundled models into device storage, so allow roughly 2.6 GB of free space (install plus copied models) before opening.
+- **First launch:** the initial open can take several minutes and may appear unresponsive while bundled models are copied. This only happens once; subsequent launches are normal.
+- **Microphone (optional):** voice input uses on-device speech recognition and requests microphone access when used.
+- **Speech output (optional):** spoken replies use the device text-to-speech engine; availability and voice quality depend on installed TTS services.
+- **Network (optional):** not required for local inference. Only needed for Remote API mode or if you configure an external endpoint.
+
 ## Build and install
 
 ### Prerequisites
@@ -84,7 +106,7 @@ APK output: `app/build/outputs/apk/debug/app-debug.apk`
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
-Prebuilt debug APKs are also published in [GitHub Releases](https://github.com/Chandrasen74/friday/releases).
+For a ready-to-install build, use the [Download](#download) section above.
 
 ## Tested on
 
@@ -96,7 +118,7 @@ Primary test device: **Samsung Galaxy M15 (SM-M156B)**, Exynos 1330, Android 16 
 
 ## Notes
 
-- Local inference runs entirely on-device and is CPU-bound; response speed and quality depend on the selected local model and hardware (see Tested on).
+- Local inference runs entirely on-device and is CPU-bound; response speed and quality depend on the selected local model and hardware (see Tested on). Bundled models: Qwen3-0.6B (default), Granite 4.0 350M int8, Granite 4.0 350M fp16.
 - Remote API mode can be used for higher-quality responses by configuring a compatible endpoint.
 - API credentials/config are stored in app preferences (API prefs excluded from Android backup rules); treat device security accordingly.
 
