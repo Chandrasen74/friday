@@ -2,9 +2,9 @@
   <img src="screenshots/friday-logo.png" alt="F.R.I.D.A.Y logo" width="160" />
 </p>
 
-# F.R.I.D.A.Y
+<h1 align="center">F.R.I.D.A.Y</h1>
 
-Local-first Android assistant app built with Kotlin and Jetpack Compose.
+<p align="center">Local-first Android assistant app built with Kotlin and Jetpack Compose.</p>
 
 **Repository:** https://github.com/Chandrasen74/friday  
 **Current version:** v0.9.0 (versionCode 36, `com.friday.assistant`, minSdk 26, target/compile SDK 35)
