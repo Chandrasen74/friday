@@ -3,7 +3,7 @@
 Local-first Android assistant app built with Kotlin and Jetpack Compose.
 
 **Repository:** https://github.com/Chandrasen74/friday  
-**Current version:** v0.7.11 (`com.friday.assistant`, minSdk 26, target/compile SDK 35)
+**Current version:** v0.8.7 (versionCode 35, `com.friday.assistant`, minSdk 26, target/compile SDK 35)
 
 ## Description
 
@@ -11,9 +11,11 @@ F.R.I.D.A.Y is an on-device-first personal assistant for Android inspired by Ton
 
 ## Screenshots
 
-| Chat | Sessions drawer | Conversation |
-| --- | --- | --- |
-| ![F.R.I.D.A.Y chat](screenshots/demo-chat.png) | ![F.R.I.D.A.Y sessions drawer](screenshots/demo-drawer.png) | ![F.R.I.D.A.Y coding help conversation](screenshots/demo-chat2.png) |
+| Chat | Sessions drawer | Conversation | Settings |
+| --- | --- | --- | --- |
+| ![F.R.I.D.A.Y chat](screenshots/demo-chat.png) | ![F.R.I.D.A.Y sessions drawer](screenshots/demo-drawer.png) | ![F.R.I.D.A.Y coding help conversation](screenshots/demo-chat2.png) | ![F.R.I.D.A.Y settings](screenshots/demo-settings.png) |
+
+An interactive HTML demo is available at [friday-demo.html](friday-demo.html) (open in a browser, use `?view=chat|drawer|chat2|settings|empty` to switch views).
 
 ## Features
 
@@ -77,9 +79,17 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 Prebuilt debug APKs are also published in [GitHub Releases](https://github.com/Chandrasen74/friday/releases).
 
+## Tested on
+
+Primary test device: **Samsung Galaxy M15 (SM-M156B)**, Exynos 1330, Android 15 (One UI 6), 4 GB RAM.
+
+- Local `Qwen3-0.6B` (4-bit `.litertlm`) inference runs fully offline on CPU: streaming at roughly 2-3 tokens/s, with the first token taking longer on the initial prompt of a session (prefill is CPU-bound).
+- Remote API mode streams much faster and is recommended for longer or higher-quality conversations.
+- Verified on this device: local and remote streaming, markdown rendering, generation metrics, session management, persona and persistent memories, export/import, mode switching, model manager, portrait and landscape layouts, drawer navigation, and edge-to-edge/cutout behavior.
+
 ## Notes
 
-- Local inference runs on-device and is CPU-bound on supported hardware; response quality/speed depends on the selected local model (bundled model is lightweight).
+- Local inference runs entirely on-device and is CPU-bound; response speed and quality depend on the selected local model and hardware (see Tested on).
 - Remote API mode can be used for higher-quality responses by configuring a compatible endpoint.
 - API credentials/config are stored in app preferences (API prefs excluded from Android backup rules); treat device security accordingly.
 
