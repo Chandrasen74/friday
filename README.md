@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="screenshots/friday-logo.png" alt="F.R.I.D.A.Y logo" width="160" />
+</p>
+
 # F.R.I.D.A.Y
 
 Local-first Android assistant app built with Kotlin and Jetpack Compose.
