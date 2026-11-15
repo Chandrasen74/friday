@@ -13,29 +13,39 @@
   }
   *{box-sizing:border-box}
   html,body{margin:0;height:100%;background:#111;color:var(--text);font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+  body.flat{background:var(--bg)}
   .phone{width:390px;height:844px;margin:24px auto;background:var(--bg);border-radius:28px;overflow:hidden;position:relative;border:1px solid #2a2a30;box-shadow:0 20px 60px rgba(0,0,0,.55)}
+  body.flat .phone{width:100%;height:100%;margin:0;border-radius:0;border:0;box-shadow:none}
   .app{height:100%;display:flex;flex-direction:column;position:relative}
-  .topbar{padding:44px 10px 8px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line);background:var(--bg)}
+  .statusbar{display:flex;justify-content:space-between;align-items:center;padding:10px 18px 2px;font-size:12.5px;font-weight:600;color:#F2F2F2}
+  .sb-icons{display:flex;align-items:center;gap:5px}
+  .sb-icons svg{display:block}
+  .topbar{padding:4px 10px 8px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line);background:var(--bg)}
   .row{display:flex;align-items:center}
-  .icon-btn{width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;color:var(--text);font-size:20px}
-  .title{font-family:Orbitron,Inter,sans-serif;font-weight:700;color:var(--primary);font-size:18px;letter-spacing:.5px}
-  .sub{font-size:11px;color:var(--muted);margin-top:2px}
-  .metrics{font-size:11px;color:var(--muted);padding:0 12px 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .icon-btn{width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;color:var(--text);font-size:19px}
+  .titlebar-col{flex:1;min-width:0;margin-left:2px}
+  .chat-title{font-size:16.5px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .brand-title{font-family:Orbitron,Inter,sans-serif;font-weight:700;color:var(--primary);font-size:18px;letter-spacing:.5px}
+  .metrics{font-size:11px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .content{flex:1;overflow:auto;padding:10px 12px 12px;display:flex;flex-direction:column;gap:10px}
-  .bubble{max-width:86%;padding:10px 12px;border-radius:14px;line-height:1.45;font-size:14px;border:1px solid var(--line)}
+  .bubble{max-width:88%;padding:10px 12px;border-radius:14px;line-height:1.45;font-size:14px;border:1px solid var(--line)}
   .assistant{align-self:flex-start;background:var(--assistant);color:var(--text)}
   .user{align-self:flex-end;background:var(--user);color:#EAF4FF;border-color:#33506B}
-  .label{font-size:11px;color:var(--muted);margin-bottom:4px}
+  .label{font-size:11px;color:var(--primary);margin-bottom:4px;font-family:Orbitron,Inter,sans-serif;letter-spacing:.4px}
+  .user .label{font-family:Inter,sans-serif;color:var(--muted);letter-spacing:0;font-size:10.5px}
+  .label-row{display:flex;align-items:center;justify-content:space-between;gap:8px}
+  .copy-ic{color:var(--muted);font-size:12px;opacity:.85}
   .msg-meta{font-size:11px;color:var(--muted);margin-top:4px}
   .composer{padding:10px 12px 22px;border-top:1px solid var(--line);display:flex;gap:8px;align-items:flex-end;background:var(--bg)}
   .input{flex:1;min-height:44px;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:12px 14px;color:var(--muted);font-size:14px}
   .send{width:44px;height:44px;border-radius:12px;background:var(--primary);color:var(--primary-dark);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:18px}
   .drawer-wrap{position:absolute;inset:0;pointer-events:none}
   .scrim{position:absolute;inset:0;background:rgba(0,0,0,.45);opacity:0}
-  .drawer{position:absolute;top:0;bottom:0;left:0;width:300px;background:var(--surface);transform:translateX(-100%);border-right:1px solid var(--line);display:flex;flex-direction:column;padding:44px 12px 16px}
+  .drawer{position:absolute;top:0;bottom:0;left:0;width:300px;background:var(--surface);transform:translateX(-100%);border-right:1px solid var(--line);display:flex;flex-direction:column;padding:36px 12px 16px}
   .drawer-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
-  .pill{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;background:#182635;color:#BEE7FF;font-size:12px;border:1px solid #28455E;margin-bottom:10px}
-  .dot{width:8px;height:8px;border-radius:50%;background:#4ADE80}
+  .pill{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;background:#182635;color:#BEE7FF;font-size:11px;border:1px solid #28455E;margin-bottom:10px;max-width:100%}
+  .pill span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .dot{width:8px;height:8px;border-radius:50%;background:#4ADE80;flex:none}
   .section-title{font-size:12px;color:var(--muted);padding:6px 8px;text-transform:uppercase;letter-spacing:.08em}
   .session{padding:10px;border-radius:10px;margin-bottom:6px;border:1px solid transparent}
   .session.active{background:#223446;border-color:#355472}
@@ -47,19 +57,36 @@
   .code{background:#17181B;border:1px solid #2b2f36;border-radius:10px;padding:10px;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:12px;color:#D7E3F4;white-space:pre-wrap}
   ul{margin:6px 0 0 18px;padding:0}
   li{margin:4px 0}
+  /* empty state */
+  #emptyContent{display:none}
+  .empty-mode #emptyContent{display:flex}
+  .empty{align-items:center;text-align:center;padding:56px 28px 20px;gap:0}
+  .empty-logo{width:104px;height:104px}
+  .empty-title{font-family:Orbitron,Inter,sans-serif;font-weight:700;color:var(--primary);font-size:26px;letter-spacing:1px;margin-top:22px}
+  .empty-sub{font-size:16px;font-weight:600;color:var(--text);margin-top:26px}
+  .empty-hint{font-size:13px;color:var(--muted);margin-top:10px;line-height:1.55;max-width:270px}
+  .empty .btn{margin-top:30px}
   /* states */
   .show-drawer .scrim{opacity:1}
   .show-drawer .drawer{transform:translateX(0)}
   .settings-screen .main{display:none}
   .settings-screen .settings-view{display:flex}
+  .empty-mode .composer{display:none}
+  .empty-mode .content-chat{display:none}
+  .content-chat{display:flex}
   .settings-view{display:none;flex-direction:column;height:100%}
-  .settings-body{padding:12px 16px;overflow:auto;display:flex;flex-direction:column;gap:14px}
-  .card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px}
+  .settings-body{padding:12px 16px;overflow:auto;display:flex;flex-direction:column}
+  .set-title{font-size:15px;font-weight:600;color:var(--text)}
+  .set-active{font-size:12.5px;color:var(--primary);margin-top:8px;line-height:1.4}
+  .chips{display:flex;gap:10px;margin-top:10px}
+  .chip{padding:9px 14px;border-radius:10px;background:#26262B;border:1px solid var(--line);font-size:13px;color:var(--text)}
+  .chip.active{background:var(--primary);color:var(--primary-dark);border-color:var(--primary);font-weight:600}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px;margin-top:12px}
   .card h3{margin:0 0 6px;font-size:15px}
   .card p{margin:0;color:var(--muted);font-size:13px;line-height:1.4}
   .field{margin-top:10px}
   .field label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px}
-  .field .box{background:#1b1c20;border:1px solid var(--line);border-radius:10px;padding:10px 12px;color:#cfd8e3;font-size:13px;font-family:ui-monospace,SFMono-Regular,Consolas,monospace}
+  .field .box{background:#1b1c20;border:1px solid var(--line);border-radius:10px;padding:10px 12px;color:#cfd8e3;font-size:12.5px;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .row-between{display:flex;align-items:center;justify-content:space-between;gap:12px}
   .btn{display:inline-flex;align-items:center;justify-content:center;padding:10px 14px;border-radius:10px;font-weight:600;font-size:13px}
   .btn.primary{background:var(--primary);color:var(--primary-dark)}
@@ -70,31 +97,40 @@
 <body>
 <div class="phone" id="phone">
   <div class="app main" id="mainView">
+    <div class="statusbar">
+      <span>10:42</span>
+      <span class="sb-icons">
+        <svg width="15" height="12" viewBox="0 0 15 12" fill="#F2F2F2"><rect x="0" y="8" width="2.5" height="4" rx="0.6"/><rect x="4" y="5.5" width="2.5" height="6.5" rx="0.6"/><rect x="8" y="3" width="2.5" height="9" rx="0.6"/><rect x="12" y="0.5" width="2.5" height="11.5" rx="0.6"/></svg>
+        <svg width="15" height="11" viewBox="0 0 16 12" fill="none" stroke="#F2F2F2" stroke-width="1.6" stroke-linecap="round"><path d="M2 4.5C5.5 1.5 10.5 1.5 14 4.5"/><path d="M4.2 7C6.5 5.2 9.5 5.2 11.8 7"/><circle cx="8" cy="10" r="1.2" fill="#F2F2F2" stroke="none"/></svg>
+        <svg width="23" height="12" viewBox="0 0 25 12"><rect x="0.5" y="0.5" width="20" height="11" rx="3" fill="none" stroke="#F2F2F2" stroke-opacity="0.5"/><rect x="2" y="2" width="15" height="8" rx="1.6" fill="#F2F2F2"/><rect x="21.7" y="3.6" width="2.2" height="4.8" rx="1" fill="#F2F2F2" fill-opacity="0.5"/></svg>
+      </span>
+    </div>
     <div class="topbar">
-      <div class="row" style="gap:2px">
-        <div class="icon-btn">☰</div>
-        <div style="margin-left:2px">
-          <div class="title">F.R.I.D.A.Y</div>
-          <div class="sub" id="chatTitle">Weekend planning</div>
+      <div class="row" style="gap:2px;flex:1;min-width:0">
+        <div class="icon-btn">&#9776;</div>
+        <div class="titlebar-col">
+          <div class="chat-title" id="chatTitle">Weekend planning</div>
+          <div class="metrics" id="metricsLine">LiteRT-LM local | Qwen3-0.6B_dynamic_wi4b32_afp32.litertlm | 3.1s TTFT | 31.4s total | 2.8 tok/s | 11.7 ch/s | 368 chars (~92 tok) | 92 chunks</div>
         </div>
       </div>
       <div class="row">
-        <div class="icon-btn" title="Regenerate">↻</div>
-        <div class="icon-btn" title="New">＋</div>
+        <div class="icon-btn" title="Regenerate">&#8635;</div>
+        <div class="icon-btn" title="New">&#65291;</div>
       </div>
     </div>
-    <div class="metrics">local • Qwen3-0.6B • 420ms TTFT • 2.1s total • 18.4 tok/s • 142 chars</div>
-    <div class="content" id="chatContent">
+
+    <!-- Chat content -->
+    <div class="content content-chat" id="chatContent">
       <div class="bubble assistant">
-        <div class="label">F.R.I.D.A.Y</div>
+        <div class="label-row"><div class="label">F.R.I.D.A.Y</div><div class="copy-ic">&#10697;</div></div>
         New session started. How can I help?
       </div>
       <div class="bubble user">
-        <div class="label">You</div>
+        <div class="label">Tap to edit and resend, long press to copy</div>
         Can you help me plan a productive Sunday and suggest a quick healthy breakfast?
       </div>
       <div class="bubble assistant">
-        <div class="label">F.R.I.D.A.Y</div>
+        <div class="label-row"><div class="label">F.R.I.D.A.Y</div><div class="copy-ic">&#10697;</div></div>
         Absolutely. Here is a simple Sunday plan:
         <ul>
           <li><b>08:00</b> Breakfast + light stretch</li>
@@ -105,27 +141,37 @@
           <li><b>20:30</b> Wind down and prep for Monday</li>
         </ul>
         <div style="margin-top:8px"><b>Quick healthy breakfast:</b> Greek yogurt bowl with oats, berries, and a spoon of peanut butter (about 5 minutes).</div>
+        <div class="msg-meta">368 chars | ~92 tok | 31.4s</div>
       </div>
       <div class="bubble user">
-        <div class="label">You</div>
+        <div class="label">Tap to edit and resend, long press to copy</div>
         Nice. Also summarize this in a checklist I can copy.
       </div>
       <div class="bubble assistant">
-        <div class="label">F.R.I.D.A.Y</div>
+        <div class="label-row"><div class="label">F.R.I.D.A.Y</div><div class="copy-ic">&#10697;</div></div>
         <div class="code">Sunday checklist
 - [ ] 08:00 Breakfast + stretch
 - [ ] 09:00 Focus block (priority task)
 - [ ] 11:00 Break + short walk
 - [ ] 12:30 Lunch and reset
 - [ ] 15:00 Errands / personal project
-- [ ] 20:30 Wind down + prep for Monday
-- [ ] Breakfast: Greek yogurt + oats + berries + peanut butter</div>
-        <div class="msg-meta">Tap to copy • Markdown supported</div>
+- [ ] 20:30 Wind down + prep for Monday</div>
+        <div class="msg-meta">Markdown supported | Tap copy to share</div>
       </div>
     </div>
+
+    <!-- Empty state content -->
+    <div class="content empty" id="emptyContent">
+      <img class="empty-logo" src="screenshots/friday-logo.png" alt="F.R.I.D.A.Y logo" />
+      <div class="empty-title">F.R.I.D.A.Y</div>
+      <div class="empty-sub">No chats yet</div>
+      <div class="empty-hint">Create a new chat to start a conversation with F.R.I.D.A.Y.</div>
+      <div class="btn primary">Create new chat</div>
+    </div>
+
     <div class="composer">
       <div class="input">Message F.R.I.D.A.Y...</div>
-      <div class="send">↑</div>
+      <div class="send">&#8593;</div>
     </div>
 
     <div class="drawer-wrap" id="drawerWrap">
@@ -133,12 +179,12 @@
       <div class="drawer">
         <div class="drawer-header">
           <div class="row" style="gap:8px">
-            <img src="https://cdn-icons-png.flaticon.com/512/5968/5968322.png" alt="logo" width="28" height="28" style="filter: hue-rotate(170deg) saturate(1.3);" />
-            <div class="title" style="font-size:17px">F.R.I.D.A.Y</div>
+            <img src="screenshots/friday-logo.png" alt="logo" width="30" height="30" />
+            <div class="brand-title" style="font-size:16px">F.R.I.D.A.Y</div>
           </div>
-          <div class="icon-btn">＋</div>
+          <div class="icon-btn">&#65291;</div>
         </div>
-        <div class="pill"><span class="dot"></span>Model ready (Qwen3-0.6B)</div>
+        <div class="pill"><span class="dot"></span><span>Model ready (Qwen3-0.6B_dynamic_wi4b32_afp32.litertlm)</span></div>
         <hr>
         <div class="section-title">Sessions</div>
         <div class="session active"><div class="name">Weekend planning</div><div class="prev">Here is a simple Sunday plan...</div></div>
@@ -146,41 +192,54 @@
         <div class="session"><div class="name">Travel ideas</div><div class="prev">Three budget-friendly destinations...</div></div>
         <div class="spacer"></div>
         <hr>
-        <div class="settings-row">⚙️ <span>Settings</span></div>
+        <div class="settings-row">&#9881; <span>Settings</span></div>
       </div>
     </div>
   </div>
 
   <div class="app settings-view" id="settingsView">
+    <div class="statusbar">
+      <span>10:42</span>
+      <span class="sb-icons">
+        <svg width="15" height="12" viewBox="0 0 15 12" fill="#F2F2F2"><rect x="0" y="8" width="2.5" height="4" rx="0.6"/><rect x="4" y="5.5" width="2.5" height="6.5" rx="0.6"/><rect x="8" y="3" width="2.5" height="9" rx="0.6"/><rect x="12" y="0.5" width="2.5" height="11.5" rx="0.6"/></svg>
+        <svg width="15" height="11" viewBox="0 0 16 12" fill="none" stroke="#F2F2F2" stroke-width="1.6" stroke-linecap="round"><path d="M2 4.5C5.5 1.5 10.5 1.5 14 4.5"/><path d="M4.2 7C6.5 5.2 9.5 5.2 11.8 7"/><circle cx="8" cy="10" r="1.2" fill="#F2F2F2" stroke="none"/></svg>
+        <svg width="23" height="12" viewBox="0 0 25 12"><rect x="0.5" y="0.5" width="20" height="11" rx="3" fill="none" stroke="#F2F2F2" stroke-opacity="0.5"/><rect x="2" y="2" width="15" height="8" rx="1.6" fill="#F2F2F2"/><rect x="21.7" y="3.6" width="2.2" height="4.8" rx="1" fill="#F2F2F2" fill-opacity="0.5"/></svg>
+      </span>
+    </div>
     <div class="topbar">
       <div class="row" style="gap:4px">
-        <div class="icon-btn">←</div>
-        <div class="title" style="font-size:18px;font-family:Inter,sans-serif">Settings</div>
+        <div class="icon-btn">&#8592;</div>
+        <div style="font-size:18px;font-weight:600">Settings</div>
       </div>
       <div style="width:40px"></div>
     </div>
     <div class="settings-body">
-      <div class="card">
-        <h3>Local on-device model</h3>
-        <p>LiteRT-LM with bundled Qwen3-0.6B model, ready for offline chat.</p>
+      <div style="padding:4px 0 2px">
+        <div class="set-title">Inference mode</div>
+        <div class="chips">
+          <div class="chip active">Local (LiteRT-LM)</div>
+          <div class="chip">Remote API</div>
+        </div>
+        <div class="set-active">Active: Local (LiteRT-LM). FRIDAY will use the on-device model.</div>
+      </div>
+      <hr>
+      <div>
+        <div class="set-title">On-device model (LiteRT-LM)</div>
+        <div class="small" style="margin-top:6px;line-height:1.45">Use a .litertlm model. Bundled model is auto-detected; you can also provide a local path.</div>
+        <div class="pill" style="margin-top:10px"><span class="dot"></span><span>Model ready (Qwen3-0.6B_dynamic_wi4b32_afp32.litertlm)</span></div>
         <div class="field"><label>Model path</label><div class="box">/data/user/0/com.friday.assistant/files/models/Qwen3-0.6B_dynamic_wi4b32_afp32.litertlm</div></div>
-        <div class="row-between" style="margin-top:12px"><div><div style="font-weight:600">Use GPU (if available)</div><div class="small">CPU mode active</div></div><div class="btn ghost">Off</div></div>
-        <div style="margin-top:12px;display:flex;gap:10px"><div class="btn primary">Load model</div><div class="btn ghost">Refresh</div></div>
+        <div style="display:flex;gap:10px;margin-top:12px"><div class="btn primary">Load model</div><div class="btn ghost">Refresh</div></div>
       </div>
-      <div class="card">
-        <h3>Remote API mode</h3>
-        <p>Configure an OpenAI-compatible or custom endpoint for higher-quality responses.</p>
-        <div class="field"><label>Endpoint URL</label><div class="box">https://api.example.com/v1/chat/completions</div></div>
-        <div class="field"><label>Model</label><div class="box">gpt-4o-mini</div></div>
-      </div>
-      <div class="card">
-        <h3>Persona & memory</h3>
+      <hr>
+      <div class="card" style="margin-top:0">
+        <h3>Persona &amp; memory</h3>
         <p>Customize F.R.I.D.A.Y's behavior and manage persistent memories across chats.</p>
       </div>
       <div class="card">
-        <h3>Chats & storage</h3>
+        <h3>Chats &amp; storage</h3>
         <p>Rename sessions, export/import JSON backups, and clear stored chat history.</p>
       </div>
+      <div style="height:16px"></div>
     </div>
   </div>
 </div>
@@ -189,17 +248,23 @@
   const view = params.get('view') || 'chat';
   const phone = document.getElementById('phone');
   const mainView = document.getElementById('mainView');
-  const settingsView = document.getElementById('settingsView');
+  if (params.get('flat') === '1') document.body.classList.add('flat');
   if (view === 'drawer') {
     mainView.classList.add('show-drawer');
   } else if (view === 'settings') {
     phone.classList.add('settings-screen');
+  } else if (view === 'empty') {
+    mainView.classList.add('empty-mode');
+    document.getElementById('chatTitle').textContent = 'F.R.I.D.A.Y';
+    document.getElementById('chatTitle').classList.remove('chat-title');
+    document.getElementById('chatTitle').classList.add('brand-title');
+    document.getElementById('metricsLine').textContent = 'LiteRT-LM local | ready';
   } else if (view === 'chat2') {
     document.getElementById('chatTitle').textContent = 'Kotlin coroutines help';
-    document.querySelector('.metrics').textContent = 'remote • gpt-4o-mini • 610ms TTFT • 3.4s total • 42.1 tok/s • 486 chars';
+    document.getElementById('metricsLine').textContent = 'Remote API | gpt-4o-mini | 610ms TTFT | 3.4s total | 42.1 tok/s | 165 ch/s | 561 chars (~140 tok) | 140 chunks';
     document.getElementById('chatContent').innerHTML = `
-      <div class="bubble user"><div class="label">You</div>How should I move blocking file and network work off the main thread in Android with coroutines?</div>
-      <div class="bubble assistant"><div class="label">F.R.I.D.A.Y</div>
+      <div class="bubble user"><div class="label">Tap to edit and resend, long press to copy</div>How should I move blocking file and network work off the main thread in Android with coroutines?</div>
+      <div class="bubble assistant"><div class="label-row"><div class="label">F.R.I.D.A.Y</div><div class="copy-ic">&#10697;</div></div>
         Use <b>Dispatchers.IO</b> for blocking I/O and keep UI updates on the main thread:
         <div class="code">viewModelScope.launch {
     val data = withContext(Dispatchers.IO) {
@@ -214,8 +279,8 @@
           <li>Keep CPU-heavy parsing on <code>Dispatchers.Default</code> if needed.</li>
         </ul>
       </div>
-      <div class="bubble user"><div class="label">You</div>Can you also show a safe retry pattern?</div>
-      <div class="bubble assistant"><div class="label">F.R.I.D.A.Y</div>
+      <div class="bubble user"><div class="label">Tap to edit and resend, long press to copy</div>Can you also show a safe retry pattern?</div>
+      <div class="bubble assistant"><div class="label-row"><div class="label">F.R.I.D.A.Y</div><div class="copy-ic">&#10697;</div></div>
         <div class="code">suspend fun &lt;T&gt; retry(times: Int = 3, block: suspend () -&gt; T): T {
     var last: Exception? = null
     repeat(times) { attempt -&gt;
@@ -226,7 +291,7 @@
     }
     throw last ?: IllegalStateException("Retry failed")
 }</div>
-        <div class="msg-meta">Streaming complete • Copy available</div>
+        <div class="msg-meta">Streaming complete | Copy available</div>
       </div>`;
   }
 </script>
