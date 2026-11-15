@@ -966,7 +966,7 @@ private fun SettingsScreen(
                     Text("Model manager", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurface)
                     Spacer(Modifier.height(6.dp))
                     Text(
-                        "Qwen3-0.6B is preloaded with the app. You can also load any other .litertlm model by path.",
+                        "Preloaded with the app (copied to device on first launch): Qwen3-0.6B (default, 343 MB), Granite 4.0 350M int8 (416 MB), Granite 4.0 350M fp16 (690 MB). Tap a model below to select it, then Load model.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

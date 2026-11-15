@@ -223,26 +223,40 @@ class LiteRtLmService(private val appContext: Context) {
         private const val BUNDLED_ASSET_DIR = "models"
 
         suspend fun ensureBundledModel(context: Context): String? = withContext(Dispatchers.IO) {
+            ensureBundledModels(context)
+            val copied = listAvailableModels(context)
+            copied.firstOrNull { it.substringAfterLast('/').startsWith("Qwen3", ignoreCase = true) }
+                ?: copied.firstOrNull()
+        }
+
+        private fun ensureBundledModels(context: Context) {
             val assets = runCatching { context.assets.list(BUNDLED_ASSET_DIR)?.toList().orEmpty() }
                 .getOrDefault(emptyList())
-            val bundledName = assets.firstOrNull { it.endsWith(".litertlm", ignoreCase = true) } ?: return@withContext null
+                .filter { it.endsWith(".litertlm", ignoreCase = true) }
+            if (assets.isEmpty()) return
             val outDir = File(context.filesDir, "models").apply { mkdirs() }
-            val outFile = File(outDir, bundledName)
-            if (!outFile.exists() || outFile.length() == 0L) {
+            for (bundledName in assets) {
+                val outFile = File(outDir, bundledName)
+                if (outFile.exists() && outFile.length() > 0L) continue
+                Log.i("FRIDAY", "MODEL: copying bundled $bundledName")
                 val tmp = File(outDir, "$bundledName.tmp")
-                context.assets.open("$BUNDLED_ASSET_DIR/$bundledName").use { input ->
-                    FileOutputStream(tmp).use { output ->
-                        input.copyTo(output)
-                        output.flush()
+                try {
+                    context.assets.open("$BUNDLED_ASSET_DIR/$bundledName").use { input ->
+                        FileOutputStream(tmp).use { output ->
+                            input.copyTo(output)
+                            output.flush()
+                        }
                     }
-                }
-                if (outFile.exists()) outFile.delete()
-                if (!tmp.renameTo(outFile)) {
-                    tmp.copyTo(outFile, overwrite = true)
-                    tmp.delete()
+                    if (outFile.exists()) outFile.delete()
+                    if (!tmp.renameTo(outFile)) {
+                        tmp.copyTo(outFile, overwrite = true)
+                        tmp.delete()
+                    }
+                    Log.i("FRIDAY", "MODEL: bundled ready $bundledName")
+                } finally {
+                    runCatching { tmp.delete() }
                 }
             }
-            outFile.absolutePath
         }
 
         fun modelDirs(context: Context): List<File> = listOfNotNull(
@@ -257,10 +271,11 @@ class LiteRtLmService(private val appContext: Context) {
             .distinct()
             .sorted()
 
-        suspend fun discoverDefaultModelPath(context: Context): String? {
-            ensureBundledModel(context)?.let { return it }
-            val found = listAvailableModels(context).firstOrNull()
-            return found
+        suspend fun discoverDefaultModelPath(context: Context): String? = withContext(Dispatchers.IO) {
+            ensureBundledModels(context)
+            val found = listAvailableModels(context)
+            found.firstOrNull { it.substringAfterLast('/').startsWith("Qwen3", ignoreCase = true) }
+                ?: found.firstOrNull()
         }
     }
 }
