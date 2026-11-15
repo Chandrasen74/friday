@@ -25,7 +25,7 @@ An interactive HTML demo is available at [friday-demo.html](friday-demo.html) (o
 - **Voice input:** microphone button composes prompts with on-device speech recognition, with a toast fallback when no speech service is available.
 - **Spoken replies (TTS):** optional "Speak replies" setting reads assistant responses aloud; each reply has a speaker toggle to play or stop it.
 - **Sessions and storage:** local chat persistence (`filesDir`), create/select/delete sessions, rename sessions, clear current/all chats, and export/import chats as JSON.
-- **Model manager:** view model status/path, list/refresh available models, download model by URL or from a curated recommended list (bundled Qwen3-0.6B default, IBM Granite 4.0 350M int8/fp16 options), load/unload/switch local model.
+- **Model manager:** Qwen3-0.6B is preloaded in the app for offline use; you can view model status/path, list/refresh available models, and load/unload/switch to another local `.litertlm` by path.
 - **Diagnostics:** in-app card with device, OS, ABI, app version, inference mode, model, last model-load and generation times, session/message counts, and TTS status, plus one-tap copy.
 - **UI:** edge-to-edge/status and display-cutout aware layout, drawer navigation, settings and separate Chats & storage screens, splash/branding with F.R.I.D.A.Y identity.
 
@@ -88,7 +88,7 @@ Primary test device: **Samsung Galaxy M15 (SM-M156B)**, Exynos 1330, Android 16 
 
 - Local `Qwen3-0.6B` (4-bit `.litertlm`) inference runs fully offline on CPU: streaming at roughly 2-3 tokens/s, with the first token taking longer on the initial prompt of a session (prefill is CPU-bound).
 - Remote API mode streams much faster and is recommended for longer or higher-quality conversations.
-- Verified on this device: local and remote streaming, markdown rendering, live generation metrics (TTFT and tokens/sec in the status line), voice input, spoken replies with mute, diagnostics card, recommended-models list, session management, persona and persistent memories, export/import, mode switching, model manager, portrait and landscape layouts, drawer navigation, and edge-to-edge/cutout behavior.
+- Verified on this device: local and remote streaming with the preloaded model, markdown rendering, live generation metrics (TTFT and tokens/sec in the status line), voice input, spoken replies with mute, diagnostics card, session management, persona and persistent memories, export/import, mode switching, model manager, portrait and landscape layouts, drawer navigation, and edge-to-edge/cutout behavior.
 
 ## Notes
 

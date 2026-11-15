@@ -17,8 +17,6 @@ import com.friday.assistant.data.MemoryItem
 import com.friday.assistant.data.MemoryStore
 import com.friday.assistant.data.ModelStatus
 import com.friday.assistant.data.PersonaConfig
-import com.friday.assistant.data.RecommendedModel
-import com.friday.assistant.data.RecommendedModels
 import com.friday.assistant.speech.TtsService
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.Dispatchers
@@ -63,8 +61,6 @@ data class ChatUiState(
     val metrics: GenerationMetrics = GenerationMetrics(),
     val editingMessageId: String? = null,
     val availableModels: List<String> = emptyList(),
-    val modelDownloadUrl: String = "",
-    val busyMessage: String? = null,
     val apiTestMessage: String? = null,
     val personaConfig: PersonaConfig = PersonaConfig(),
     val memories: List<MemoryItem> = emptyList(),
@@ -72,7 +68,6 @@ data class ChatUiState(
     val isMemoryBusy: Boolean = false,
     val speakReplies: Boolean = false,
     val speakingMessageId: String? = null,
-    val recommendedModels: List<RecommendedModel> = RecommendedModels.CATALOG,
     val diagnostics: DiagnosticsInfo = DiagnosticsInfo()
 ) {
     val activeSession: ChatSession?
@@ -168,29 +163,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     fun onApiKeyChange(value: String) { updateApi { it.copy(apiKey = value) } }
     fun onApiModelChange(value: String) { updateApi { it.copy(model = value) } }
 
-    fun onModelDownloadUrlChange(value: String) { _uiState.update { it.copy(modelDownloadUrl = value) } }
-
     fun refreshAvailableModels() {
         viewModelScope.launch(Dispatchers.IO) {
             val models = LiteRtLmService.listAvailableModels(getApplication())
             _uiState.update { it.copy(availableModels = models) }
-        }
-    }
-
-    fun downloadModel(urlOverride: String? = null) {
-        val url = (urlOverride ?: _uiState.value.modelDownloadUrl).trim()
-        if (url.isBlank()) return
-        Log.i("FRIDAY", "DL: start ${url.substringAfterLast('/')}")
-        viewModelScope.launch {
-            _uiState.update { it.copy(busyMessage = "Downloading model...") }
-            val res = LiteRtLmService.downloadModel(getApplication(), url)
-            _uiState.update { state ->
-                val msg = res.fold(onSuccess = { "Downloaded: ${it.substringAfterLast('/')}" }, onFailure = { "Download failed: ${it.message}" })
-                state.copy(busyMessage = msg, modelPathInput = res.getOrNull() ?: state.modelPathInput)
-            }
-            Log.i("FRIDAY", "DL: ${res.fold(onSuccess = { "done ${it.substringAfterLast('/')}" }, onFailure = { "failed: ${it.message}" })}")
-            refreshAvailableModels()
-            pushDiagnostics()
         }
     }
 

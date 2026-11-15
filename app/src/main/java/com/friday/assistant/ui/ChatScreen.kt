@@ -225,10 +225,7 @@ fun FridayApp(viewModel: ChatViewModel) {
                     onApiBaseUrlChange = viewModel::onApiBaseUrlChange,
                     onApiKeyChange = viewModel::onApiKeyChange,
                     onApiModelChange = viewModel::onApiModelChange,
-                    onModelDownloadUrlChange = viewModel::onModelDownloadUrlChange,
-                    onDownloadModel = { viewModel.downloadModel() },
                     onSpeakRepliesChange = viewModel::onSpeakRepliesChange,
-                    onDownloadRecommended = { viewModel.downloadModel(it) },
                     onTestApi = viewModel::testApiEndpoint,
                     onRefreshModels = viewModel::refreshAvailableModels
                 )
@@ -859,10 +856,7 @@ private fun SettingsScreen(
     onApiBaseUrlChange: (String) -> Unit,
     onApiKeyChange: (String) -> Unit,
     onApiModelChange: (String) -> Unit,
-    onModelDownloadUrlChange: (String) -> Unit,
-    onDownloadModel: () -> Unit,
     onSpeakRepliesChange: (Boolean) -> Unit,
-    onDownloadRecommended: (String) -> Unit,
     onTestApi: () -> Unit,
     onRefreshModels: () -> Unit
 ) {
@@ -971,13 +965,11 @@ private fun SettingsScreen(
                 item {
                     Text("Model manager", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurface)
                     Spacer(Modifier.height(6.dp))
-                    SettingsTextField("Download model URL (.litertlm)", state.modelDownloadUrl, "https://.../model.litertlm", onModelDownloadUrlChange, mono = true, singleLine = true)
-                    Spacer(Modifier.height(8.dp))
-                    ActionButton("Download model", primary = true, enabled = state.modelDownloadUrl.isNotBlank()) { onDownloadModel() }
-                    state.busyMessage?.let {
-                        Spacer(Modifier.height(6.dp))
-                        Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
+                    Text(
+                        "Qwen3-0.6B is preloaded with the app. You can also load any other .litertlm model by path.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
                 item {
                     Text("Available models", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurface)
@@ -1000,60 +992,7 @@ private fun SettingsScreen(
                         }
                     }
                 }
-                item {
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                    Spacer(Modifier.height(8.dp))
-                    Text("Recommended models", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface)
-                    Spacer(Modifier.height(6.dp))
-                    Text(
-                        "Curated .litertlm models that fit this phone class. Download once, then tap a row to select it.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(Modifier.height(10.dp))
-                    state.recommendedModels.forEach { rec ->
-                        val installedPath = state.availableModels.firstOrNull { it.substringAfterLast('/').equals(rec.fileName, ignoreCase = true) }
-                        val selected = installedPath != null && state.modelPathInput == installedPath
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 6.dp)
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(MaterialTheme.colorScheme.surface)
-                                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp))
-                                .clickable(enabled = installedPath != null) { installedPath?.let(onPathChange) }
-                                .padding(12.dp)
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(rec.displayName, color = MaterialTheme.colorScheme.onSurface, style = MaterialTheme.typography.labelLarge)
-                                    Text(
-                                        "${rec.sizeLabel} | ${rec.fileName}",
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                }
-                                Text(
-                                    when {
-                                        selected -> "Selected"
-                                        installedPath != null -> "Installed"
-                                        else -> "Not installed"
-                                    },
-                                    color = if (installedPath != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                                    style = MaterialTheme.typography.labelSmall
-                                )
-                            }
-                            Spacer(Modifier.height(4.dp))
-                            Text(rec.description, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
-                            if (installedPath == null) {
-                                Spacer(Modifier.height(8.dp))
-                                ActionButton("Download model (${rec.sizeLabel})", primary = true, enabled = !state.modelStatus.isLoading) { onDownloadRecommended(rec.url) }
-                            }
-                        }
-                    }
-                }
+
                 item {
                     Row(
                         modifier = Modifier.fillMaxWidth(),

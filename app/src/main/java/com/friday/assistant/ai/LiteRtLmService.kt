@@ -257,57 +257,6 @@ class LiteRtLmService(private val appContext: Context) {
             .distinct()
             .sorted()
 
-        suspend fun downloadModel(context: Context, url: String): Result<String> = withContext(Dispatchers.IO) {
-            runCatching {
-                val u = url.trim()
-                require(u.startsWith("http://") || u.startsWith("https://")) { "Enter a valid http(s) URL" }
-                Log.i("FRIDAY", "DL: connecting ${u.substringAfterLast('/')}")
-                val rawName = u.substringAfterLast('/').substringBefore('?').ifBlank { "model.litertlm" }
-                val sanitized = rawName.replace(Regex("[^A-Za-z0-9._-]"), "_").take(80).ifBlank { "model.litertlm" }
-                val fileName = if (sanitized.endsWith(".litertlm", true)) sanitized else "$sanitized.litertlm"
-                val outDir = File(context.filesDir, "models").apply { mkdirs() }
-                val outFile = File(outDir, fileName)
-                val tmp = File(outDir, "$fileName.tmp")
-                val conn = (java.net.URL(u).openConnection() as java.net.HttpURLConnection).apply {
-                    connectTimeout = 20000
-                    readTimeout = 60000
-                    instanceFollowRedirects = true
-                }
-                try {
-                    val code = conn.responseCode
-                    if (code !in 200..299) error("Download failed: HTTP $code")
-                    val maxBytes = 5L * 1024L * 1024L * 1024L
-                    val len = conn.contentLengthLong
-                    if (len > maxBytes) error("Model too large (>${maxBytes / (1024 * 1024)} MB limit)")
-                    var total = 0L
-                    conn.inputStream.use { input ->
-                        java.io.FileOutputStream(tmp).use { output ->
-                            val buf = ByteArray(DEFAULT_BUFFER_SIZE)
-                            while (true) {
-                                val read = input.read(buf)
-                                if (read <= 0) break
-                                total += read
-                                if (total > maxBytes) error("Model too large (>${maxBytes / (1024 * 1024)} MB limit)")
-                                output.write(buf, 0, read)
-                            }
-                            output.flush()
-                        }
-                    }
-                    if (total <= 0L) error("Downloaded file is empty")
-                    Log.i("FRIDAY", "DL: saved ${total / (1024 * 1024)} MB -> $fileName")
-                    if (outFile.exists()) outFile.delete()
-                    if (!tmp.renameTo(outFile)) {
-                        tmp.copyTo(outFile, overwrite = true)
-                        tmp.delete()
-                    }
-                    outFile.absolutePath
-                } finally {
-                    runCatching { tmp.delete() }
-                    conn.disconnect()
-                }
-            }
-        }
-
         suspend fun discoverDefaultModelPath(context: Context): String? {
             ensureBundledModel(context)?.let { return it }
             val found = listAvailableModels(context).firstOrNull()
