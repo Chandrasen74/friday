@@ -1,6 +1,7 @@
 package com.friday.assistant.ai
 
 import android.content.Context
+import android.util.Log
 import com.friday.assistant.data.ModelStatus
 import com.google.ai.edge.litertlm.Backend
 import com.google.ai.edge.litertlm.Contents
@@ -38,6 +39,8 @@ class LiteRtLmService(private val appContext: Context) {
                 require(file.exists() && file.isFile) { "Model file not found: $modelPath" }
                 require(file.extension.equals("litertlm", ignoreCase = true)) { "Expected a .litertlm model file." }
 
+                Log.i("FRIDAY", "MODEL: loading ${file.name} (${file.length() / (1024 * 1024)} MB) gpu=$useGpu")
+                val t0 = System.currentTimeMillis()
                 val config = EngineConfig(
                     modelPath = file.absolutePath,
                     backend = if (useGpu) Backend.GPU() else Backend.CPU(),
@@ -47,6 +50,7 @@ class LiteRtLmService(private val appContext: Context) {
                 newEngine.initialize()
                 engine = newEngine
                 loadedPath = file.absolutePath
+                Log.i("FRIDAY", "MODEL: loaded ${file.name} in ${System.currentTimeMillis() - t0} ms")
                 ModelStatus(
                     configuredPath = modelPath,
                     resolvedPath = file.absolutePath,
@@ -54,6 +58,7 @@ class LiteRtLmService(private val appContext: Context) {
                     statusText = "Model ready (${file.name})"
                 )
             }.onFailure {
+                Log.w("FRIDAY", "MODEL: load failed: ${it.message}")
                 closeInternal()
             }
         }
@@ -103,6 +108,7 @@ class LiteRtLmService(private val appContext: Context) {
         val userPrompt = prompt.trim().ifBlank { prompt }
 
         val buffer = StringBuilder()
+        val genStart = System.currentTimeMillis()
         try {
             conv.sendMessageAsync(
                 userPrompt,
@@ -120,17 +126,20 @@ class LiteRtLmService(private val appContext: Context) {
                     override fun onDone() {
                         if (completed.get()) return
                         val text = sanitizeLocalOutput(buffer.toString(), streaming = false).ifBlank { "(empty response)" }
+                        Log.i("FRIDAY", "GEN: model done ${text.length} chars in ${System.currentTimeMillis() - genStart} ms")
                         trySend(text)
                         complete()
                     }
 
                     override fun onError(t: Throwable) {
                         if (completed.get()) return
+                        Log.w("FRIDAY", "GEN: model error: ${t.message}")
                         complete(t)
                     }
                 }
             )
         } catch (e: Throwable) {
+            Log.w("FRIDAY", "GEN: send failed: ${e.message}")
             complete(e)
         }
 
@@ -252,6 +261,7 @@ class LiteRtLmService(private val appContext: Context) {
             runCatching {
                 val u = url.trim()
                 require(u.startsWith("http://") || u.startsWith("https://")) { "Enter a valid http(s) URL" }
+                Log.i("FRIDAY", "DL: connecting ${u.substringAfterLast('/')}")
                 val rawName = u.substringAfterLast('/').substringBefore('?').ifBlank { "model.litertlm" }
                 val sanitized = rawName.replace(Regex("[^A-Za-z0-9._-]"), "_").take(80).ifBlank { "model.litertlm" }
                 val fileName = if (sanitized.endsWith(".litertlm", true)) sanitized else "$sanitized.litertlm"
@@ -284,6 +294,7 @@ class LiteRtLmService(private val appContext: Context) {
                         }
                     }
                     if (total <= 0L) error("Downloaded file is empty")
+                    Log.i("FRIDAY", "DL: saved ${total / (1024 * 1024)} MB -> $fileName")
                     if (outFile.exists()) outFile.delete()
                     if (!tmp.renameTo(outFile)) {
                         tmp.copyTo(outFile, overwrite = true)

@@ -3,7 +3,7 @@
 Local-first Android assistant app built with Kotlin and Jetpack Compose.
 
 **Repository:** https://github.com/Chandrasen74/friday  
-**Current version:** v0.8.7 (versionCode 35, `com.friday.assistant`, minSdk 26, target/compile SDK 35)
+**Current version:** v0.9.0 (versionCode 36, `com.friday.assistant`, minSdk 26, target/compile SDK 35)
 
 ## Description
 
@@ -21,9 +21,12 @@ An interactive HTML demo is available at [friday-demo.html](friday-demo.html) (o
 
 - **Local inference (LiteRT-LM):** on-device text generation using `com.google.ai.edge.litertlm:litertlm-android` with a bundled/preloaded `litert-community/Qwen3-0.6B` (`Qwen3-0.6B_dynamic_wi4b32_afp32.litertlm`, CPU-oriented) model.
 - **Remote API inference:** configurable endpoint/key/model with mode switching (Local / Remote API), flexible endpoint handling (OpenAI-compatible, Ollama-style, and custom paths), and endpoint testing.
-- **Chat experience:** streaming responses, markdown rendering, stop generation, regenerate, edit and resend, copy messages, and generation metrics (TTFT, total time, estimated tokens/sec, chars/sec, output stats).
+- **Chat experience:** streaming responses, markdown rendering, stop generation, regenerate, edit and resend, copy messages, and generation metrics (TTFT, total time, estimated tokens/sec, chars/sec, output stats) shown live in the status line while streaming.
+- **Voice input:** microphone button composes prompts with on-device speech recognition, with a toast fallback when no speech service is available.
+- **Spoken replies (TTS):** optional "Speak replies" setting reads assistant responses aloud; each reply has a speaker toggle to play or stop it.
 - **Sessions and storage:** local chat persistence (`filesDir`), create/select/delete sessions, rename sessions, clear current/all chats, and export/import chats as JSON.
-- **Model manager:** view model status/path, list/refresh available models, download model by URL, load/unload/switch local model.
+- **Model manager:** view model status/path, list/refresh available models, download model by URL or from a curated recommended list (bundled Qwen3-0.6B default, Gemma 3 270M and 1B options), load/unload/switch local model.
+- **Diagnostics:** in-app card with device, OS, ABI, app version, inference mode, model, last model-load and generation times, session/message counts, and TTS status, plus one-tap copy.
 - **UI:** edge-to-edge/status and display-cutout aware layout, drawer navigation, settings and separate Chats & storage screens, splash/branding with F.R.I.D.A.Y identity.
 
 ## Tech stack
@@ -81,11 +84,11 @@ Prebuilt debug APKs are also published in [GitHub Releases](https://github.com/C
 
 ## Tested on
 
-Primary test device: **Samsung Galaxy M15 (SM-M156B)**, Exynos 1330, Android 15 (One UI 6), 4 GB RAM.
+Primary test device: **Samsung Galaxy M15 (SM-M156B)**, Exynos 1330, Android 16 (API 36), 4 GB RAM.
 
 - Local `Qwen3-0.6B` (4-bit `.litertlm`) inference runs fully offline on CPU: streaming at roughly 2-3 tokens/s, with the first token taking longer on the initial prompt of a session (prefill is CPU-bound).
 - Remote API mode streams much faster and is recommended for longer or higher-quality conversations.
-- Verified on this device: local and remote streaming, markdown rendering, generation metrics, session management, persona and persistent memories, export/import, mode switching, model manager, portrait and landscape layouts, drawer navigation, and edge-to-edge/cutout behavior.
+- Verified on this device: local and remote streaming, markdown rendering, live generation metrics (TTFT and tokens/sec in the status line), voice input, spoken replies with mute, diagnostics card, recommended-models list, session management, persona and persistent memories, export/import, mode switching, model manager, portrait and landscape layouts, drawer navigation, and edge-to-edge/cutout behavior.
 
 ## Notes
 
