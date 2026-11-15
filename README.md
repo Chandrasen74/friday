@@ -19,13 +19,13 @@ An interactive HTML demo is available at [friday-demo.html](friday-demo.html) (o
 
 ## Features
 
-- **Local inference (LiteRT-LM):** on-device text generation using `com.google.ai.edge.litertlm:litertlm-android` with a bundled/preloaded `litert-community/Qwen3-0.6B` (`Qwen3-0.6B_dynamic_wi4b32_afp32.litertlm`, CPU-oriented) model.
+- **Local inference (LiteRT-LM):** on-device text generation using `com.google.ai.edge.litertlm:litertlm-android` with preloaded models bundled in the APK: `litert-community/Qwen3-0.6B` (`Qwen3-0.6B_dynamic_wi4b32_afp32.litertlm`, default, CPU-oriented) plus `litert-community/granite-4.0-h-350m` int8 and fp16 variants. Models are copied to device storage on first launch.
 - **Remote API inference:** configurable endpoint/key/model with mode switching (Local / Remote API), flexible endpoint handling (OpenAI-compatible, Ollama-style, and custom paths), and endpoint testing.
 - **Chat experience:** streaming responses, markdown rendering, stop generation, regenerate, edit and resend, copy messages, and generation metrics (TTFT, total time, estimated tokens/sec, chars/sec, output stats) shown live in the status line while streaming.
 - **Voice input:** microphone button composes prompts with on-device speech recognition, with a toast fallback when no speech service is available.
 - **Spoken replies (TTS):** optional "Speak replies" setting reads assistant responses aloud; each reply has a speaker toggle to play or stop it.
 - **Sessions and storage:** local chat persistence (`filesDir`), create/select/delete sessions, rename sessions, clear current/all chats, and export/import chats as JSON.
-- **Model manager:** Qwen3-0.6B is preloaded in the app for offline use; you can view model status/path, list/refresh available models, and load/unload/switch to another local `.litertlm` by path.
+- **Model manager:** Qwen3-0.6B and Granite 4.0 350M (int8, fp16) are preloaded in the app for offline use; you can view model status/path, list/refresh available models, and load/unload/switch between them or load another local `.litertlm` by path.
 - **Diagnostics:** in-app card with device, OS, ABI, app version, inference mode, model, last model-load and generation times, session/message counts, and TTS status, plus one-tap copy.
 - **UI:** edge-to-edge/status and display-cutout aware layout, drawer navigation, settings and separate Chats & storage screens, splash/branding with F.R.I.D.A.Y identity.
 
