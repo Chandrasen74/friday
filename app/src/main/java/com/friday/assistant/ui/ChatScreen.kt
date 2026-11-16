@@ -406,7 +406,8 @@ private fun DrawerDepthBox(
         modifier = modifier
             .fillMaxSize()
             .graphicsLayer {
-                val fraction = (drawerState.currentOffset / drawerWidthPx).coerceIn(0f, 1f)
+                val raw = drawerState.currentOffset / drawerWidthPx
+                val fraction = if (raw.isNaN()) 0f else raw.coerceIn(0f, 1f)
                 scaleX = lerp(1f, 0.965f, fraction)
                 scaleY = lerp(1f, 0.965f, fraction)
                 shape = RoundedCornerShape(lerp(0f, 24f, fraction).dp)
@@ -414,7 +415,8 @@ private fun DrawerDepthBox(
             }
             .drawWithContent {
                 drawContent()
-                val fraction = (drawerState.currentOffset / drawerWidthPx).coerceIn(0f, 1f)
+                val raw = drawerState.currentOffset / drawerWidthPx
+                val fraction = if (raw.isNaN()) 0f else raw.coerceIn(0f, 1f)
                 if (fraction > 0.01f) {
                     drawRect(ObsidianVoid.copy(alpha = 0.55f * fraction))
                 }
