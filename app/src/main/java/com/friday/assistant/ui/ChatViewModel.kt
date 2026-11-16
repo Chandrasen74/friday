@@ -68,7 +68,8 @@ data class ChatUiState(
     val isMemoryBusy: Boolean = false,
     val speakReplies: Boolean = false,
     val speakingMessageId: String? = null,
-    val diagnostics: DiagnosticsInfo = DiagnosticsInfo()
+    val diagnostics: DiagnosticsInfo = DiagnosticsInfo(),
+    val bundledCopyProgress: LiteRtLmService.BundledCopyProgress? = null
 ) {
     val activeSession: ChatSession?
         get() = sessions.firstOrNull { it.id == activeSessionId } ?: sessions.firstOrNull()
@@ -123,7 +124,16 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         pushDiagnostics()
         tts.onSpeakingChanged = { speaking -> if (!speaking) setSpeakingMessage(null) }
         viewModelScope.launch {
-            val discovered = LiteRtLmService.discoverDefaultModelPath(getApplication<Application>().applicationContext).orEmpty()
+            val discovered = try {
+                LiteRtLmService.discoverDefaultModelPath(getApplication<Application>().applicationContext) { progress ->
+                    _uiState.update { it.copy(bundledCopyProgress = progress, modelStatus = ModelStatus(statusText = "Preparing bundled models...")) }
+                }.orEmpty()
+            } catch (e: Exception) {
+                Log.w("FRIDAY", "MODEL: bundled copy failed: ${e.message}")
+                _uiState.update { it.copy(bundledCopyProgress = null, modelStatus = ModelStatus(statusText = "Failed to prepare bundled models", lastError = e.message)) }
+                ""
+            }
+            _uiState.update { it.copy(bundledCopyProgress = null) }
             val chosen = savedPathPref.ifBlank { discovered }
             _uiState.update { it.copy(modelPathInput = chosen) }
             refreshAvailableModels()
