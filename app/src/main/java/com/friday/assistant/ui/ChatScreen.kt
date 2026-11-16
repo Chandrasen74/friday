@@ -10,7 +10,13 @@ import androidx.activity.compose.PredictiveBackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -25,6 +31,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -93,17 +101,24 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.AnnotatedString
@@ -115,6 +130,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.util.lerp
 import androidx.compose.ui.ExperimentalComposeUiApi
 import java.util.Locale
@@ -133,9 +149,31 @@ import com.friday.assistant.ui.theme.FridayDisplayFont
 import com.friday.assistant.ui.screens.PreparingScreen
 import com.friday.assistant.ui.theme.FridayMotion
 import com.friday.assistant.ui.theme.ObsidianVoid
+import com.friday.assistant.ui.components.TelemetryHeader
+import com.friday.assistant.ui.components.TypingDots
+import com.friday.assistant.ui.components.VoiceWaveform
+import com.friday.assistant.ui.intro.LogoIntro
+import com.friday.assistant.ui.theme.CyanBorderGlow
+import com.friday.assistant.ui.theme.LegacyOnPrimaryDark
+import com.friday.assistant.ui.theme.ObsidianBase
+import com.friday.assistant.ui.components.ObsidianSurface
+import com.friday.assistant.ui.theme.ObsidianSurface as ObsidianSurfaceColor
+import com.friday.assistant.ui.theme.ObsidianSurfaceElevated
+import com.friday.assistant.ui.theme.SpecularHighlightSubtle
+import com.friday.assistant.ui.theme.StarkCyanDeep
+import com.friday.assistant.ui.theme.StarkCyanMuted
+import com.friday.assistant.ui.theme.StarkCyanPrimary
+import com.friday.assistant.ui.theme.TelemetryCrimson
+import com.friday.assistant.ui.theme.TextPrimary
+import com.friday.assistant.ui.theme.TextSecondary
+import com.friday.assistant.ui.theme.TextTertiary
+import com.friday.assistant.ui.theme.UserBubbleGradientBottom
+import com.friday.assistant.ui.theme.UserBubbleGradientTop
+import com.friday.assistant.ui.theme.rememberReducedMotion
 import com.mikepenz.markdown.m3.Markdown
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -185,6 +223,16 @@ fun FridayApp(viewModel: ChatViewModel) {
         scope.launch { drawerState.close() }
     }
 
+    // Cold-boot hero: ChatScreen mounts underneath from frame 1 (inference,
+    // database and flows run in parallel); the intro overlays and docks.
+    // Played once per process launch; skipped while the bundled copy runs.
+    var introFinished by rememberSaveable { mutableStateOf(false) }
+    val reducedMotion = rememberReducedMotion()
+    var topBarLogoCenter by remember { mutableStateOf(IntOffset.Zero) }
+    LaunchedEffect(state.bundledCopyProgress) {
+        if (state.bundledCopyProgress != null) introFinished = true
+    }
+
     AnimatedContent(
         targetState = destination,
         transitionSpec = {
@@ -229,53 +277,74 @@ fun FridayApp(viewModel: ChatViewModel) {
                 }
             }
             AppDestination.Chat -> {
-                ModalNavigationDrawer(
-                    drawerState = drawerState,
-                    gesturesEnabled = true,
-                    scrimColor = Color.Transparent,
-                    drawerContent = {
-                        ModalDrawerSheet(
-                            modifier = Modifier
-                                .width(320.dp)
-                                .fillMaxHeight(),
-                            drawerContainerColor = MaterialTheme.colorScheme.surface,
-                            drawerTonalElevation = 0.dp
-                        ) {
-                            DrawerContent(
+                Box(modifier = Modifier.fillMaxSize()) {
+                    ModalNavigationDrawer(
+                        drawerState = drawerState,
+                        gesturesEnabled = true,
+                        scrimColor = Color.Transparent,
+                        drawerContent = {
+                            ModalDrawerSheet(
+                                modifier = Modifier
+                                    .width(320.dp)
+                                    .fillMaxHeight()
+                                    .drawWithCache {
+                                        onDrawBehind {
+                                            // Right-edge specular hairline
+                                            drawLine(
+                                                color = SpecularHighlightSubtle,
+                                                start = Offset(size.width - 0.5f, 0f),
+                                                end = Offset(size.width - 0.5f, size.height),
+                                                strokeWidth = 1.dp.toPx()
+                                            )
+                                        }
+                                    },
+                                drawerContainerColor = ObsidianBase,
+                                drawerTonalElevation = 0.dp
+                            ) {
+                                DrawerContent(
+                                    state = state,
+                                    onNewSession = {
+                                        viewModel.newSession()
+                                        scope.launch { drawerState.close() }
+                                    },
+                                    onSelectSession = {
+                                        viewModel.selectSession(it)
+                                        scope.launch { drawerState.close() }
+                                    },
+                                    onDeleteSession = { viewModel.deleteSession(it) },
+                                    onOpenSettings = {
+                                        viewModel.toggleSettings(true)
+                                        scope.launch { drawerState.close() }
+                                    }
+                                )
+                            }
+                        }
+                    ) {
+                        DrawerDepthBox(drawerState = drawerState) {
+                            ChatScreen(
                                 state = state,
-                                onNewSession = {
-                                    viewModel.newSession()
-                                    scope.launch { drawerState.close() }
+                                onMenu = {
+                                    focusManager.clearFocus()
+                                    keyboardController?.hide()
+                                    scope.launch { drawerState.open() }
                                 },
-                                onSelectSession = {
-                                    viewModel.selectSession(it)
-                                    scope.launch { drawerState.close() }
-                                },
-                                onDeleteSession = { viewModel.deleteSession(it) },
-                                onOpenSettings = {
-                                    viewModel.toggleSettings(true)
-                                    scope.launch { drawerState.close() }
-                                }
+                                onNew = { viewModel.newSession() },
+                                onInputChange = viewModel::onInputChange,
+                                onSend = viewModel::sendMessage,
+                                onStop = viewModel::stopGeneration,
+                                onRegenerate = viewModel::regenerateLastResponse,
+                                onEditMessage = viewModel::startEditMessage,
+                                onMic = { launchSpeechInput() },
+                                onSpeakMessage = viewModel::speakMessage,
+                                onLogoPositioned = { topBarLogoCenter = it }
                             )
                         }
                     }
-                ) {
-                    DrawerDepthBox(drawerState = drawerState) {
-                        ChatScreen(
-                            state = state,
-                            onMenu = {
-                                focusManager.clearFocus()
-                                keyboardController?.hide()
-                                scope.launch { drawerState.open() }
-                            },
-                            onNew = { viewModel.newSession() },
-                            onInputChange = viewModel::onInputChange,
-                            onSend = viewModel::sendMessage,
-                            onStop = viewModel::stopGeneration,
-                            onRegenerate = viewModel::regenerateLastResponse,
-                            onEditMessage = viewModel::startEditMessage,
-                            onMic = { launchSpeechInput() },
-                            onSpeakMessage = viewModel::speakMessage
+                    if (!introFinished) {
+                        LogoIntro(
+                            dockTarget = topBarLogoCenter,
+                            reducedMotion = reducedMotion,
+                            onFinish = { introFinished = true }
                         )
                     }
                 }
@@ -462,17 +531,24 @@ private fun SessionRow(
     onSelect: () -> Unit,
     onDelete: () -> Unit
 ) {
-    val bg = if (selected) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surface
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 2.dp)
             .clip(RoundedCornerShape(10.dp))
-            .background(bg)
+            .background(if (selected) StarkCyanMuted else Color.Transparent)
             .clickable { onSelect() }
             .padding(horizontal = 10.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        Box(
+            modifier = Modifier
+                .width(3.dp)
+                .height(28.dp)
+                .clip(RoundedCornerShape(2.dp))
+                .background(if (selected) StarkCyanPrimary else Color.Transparent)
+        )
+        Spacer(Modifier.width(10.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = session.title,
@@ -536,9 +612,11 @@ private fun ChatScreen(
     onRegenerate: () -> Unit,
     onEditMessage: (String) -> Unit,
     onMic: () -> Unit,
-    onSpeakMessage: (String) -> Unit
+    onSpeakMessage: (String) -> Unit,
+    onLogoPositioned: (IntOffset) -> Unit
 ) {
     val session = state.activeSession
+    val reducedMotion = rememberReducedMotion()
     val listState = remember(session?.id) { androidx.compose.foundation.lazy.LazyListState() }
     val messages = session?.messages.orEmpty()
     val clipboard = LocalClipboardManager.current
@@ -578,63 +656,37 @@ private fun ChatScreen(
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            Column(modifier = Modifier.statusBarsPadding().displayCutoutPadding()) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(MaterialTheme.colorScheme.background)
-                        .padding(horizontal = 4.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    IconButton(onClick = onMenu) {
-                        Icon(Icons.Default.Menu, contentDescription = "Menu", tint = MaterialTheme.colorScheme.onSurface)
+            TelemetryHeader(
+                status = state.modelStatus,
+                isGenerating = state.isGenerating,
+                subtitle = buildString {
+                    if (session != null && session.title.isNotBlank()) {
+                        append(session.title)
+                        append("  •  ")
                     }
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = session?.title ?: "F.R.I.D.A.Y",
-                            style = MaterialTheme.typography.titleSmall.copy(
-                                fontWeight = if (session == null) FontWeight.Bold else FontWeight.SemiBold,
-                                fontFamily = if (session == null) FridayDisplayFont else FontFamily.Default
-                            ),
-                            color = if (session == null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        val mode = when {
+                    append(
+                        when {
                             state.inferenceMode == InferenceMode.REMOTE_API && state.apiConfig.isConfigured -> "Remote API"
                             state.inferenceMode == InferenceMode.REMOTE_API -> "Remote API (not configured)"
                             state.modelStatus.isReady -> "LiteRT-LM local"
                             else -> "Local fallback"
                         }
-                        val modelLabel = state.metrics.modelName.ifBlank {
-                            state.modelStatus.resolvedPath?.substringAfterLast('/') ?: ""
-                        }.removeSuffix(".litertlm")
-                        Text(
-                            text = "$mode | ${modelLabel.ifBlank { "no model" }}",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Text(
-                            text = formatMetrics(state.metrics, state.isGenerating),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis
-                        )
+                    )
+                    val modelLabel = state.metrics.modelName.ifBlank {
+                        state.modelStatus.resolvedPath?.substringAfterLast('/') ?: ""
+                    }.removeSuffix(".litertlm")
+                    if (modelLabel.isNotBlank()) {
+                        append("  •  ")
+                        append(modelLabel)
                     }
-                    if (session != null) {
-                        IconButton(onClick = onRegenerate, enabled = !state.isGenerating && !state.isMemoryBusy) {
-                            Icon(Icons.Default.Refresh, contentDescription = "Regenerate", tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    }
-                    IconButton(onClick = onNew) {
-                        Icon(Icons.Default.Add, contentDescription = "New", tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            }
+                },
+                metricsLine = formatMetrics(state.metrics, state.isGenerating),
+                onMenu = onMenu,
+                onNew = onNew,
+                onRegenerate = if (session != null) onRegenerate else null,
+                regenerateEnabled = !state.isGenerating && !state.isMemoryBusy,
+                onLogoPositioned = onLogoPositioned
+            )
         },
         bottomBar = {
             if (session != null) {
@@ -650,43 +702,61 @@ private fun ChatScreen(
         }
     ) { padding ->
         if (session == null) {
+            val prompts = listOf(
+                "Draft a professional email reply",
+                "Explain a complex topic simply",
+                "Brainstorm weekend project ideas",
+                "Help me plan my day"
+            )
             Column(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(padding)
-                    .background(MaterialTheme.colorScheme.background)
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = 24.dp, vertical = 24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Spacer(Modifier.height(24.dp))
+                Spacer(Modifier.height(20.dp))
+                // Ambient breathing core
+                Box(modifier = Modifier.size(96.dp), contentAlignment = Alignment.Center) {
+                    BreathingAura(modifier = Modifier.matchParentSize(), reducedMotion = reducedMotion)
                     Image(
                         painter = painterResource(id = R.drawable.friday_logo_blue),
                         contentDescription = "F.R.I.D.A.Y logo",
-                        modifier = Modifier.size(120.dp)
+                        contentScale = androidx.compose.ui.layout.ContentScale.Fit,
+                        modifier = Modifier.size(64.dp)
                     )
-                    Spacer(Modifier.height(16.dp))
-                    Text(
-                        text = "F.R.I.D.A.Y",
-                        style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold, fontFamily = FridayDisplayFont),
-                        color = MaterialTheme.colorScheme.primary
+                }
+                Spacer(Modifier.height(20.dp))
+                Text(
+                    text = "F.R.I.D.A.Y",
+                    style = MaterialTheme.typography.headlineMedium.copy(fontFamily = FridayDisplayFont),
+                    color = TextPrimary
+                )
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = "READY FOR LOCAL INFERENCE",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = TextTertiary
+                )
+                Spacer(Modifier.height(28.dp))
+                prompts.forEachIndexed { index, prompt ->
+                    PromptCard(
+                        text = prompt,
+                        index = index,
+                        reducedMotion = reducedMotion,
+                        onSubmit = {
+                            onInputChange(prompt)
+                            onSend()
+                        }
                     )
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        text = "No chats yet",
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Spacer(Modifier.height(6.dp))
-                    Text(
-                        text = "Create a new chat to start a conversation with F.R.I.D.A.Y.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(Modifier.height(20.dp))
-                    ActionButton(text = "Create new chat", primary = true, enabled = true, onClick = onNew)
+                    Spacer(Modifier.height(10.dp))
+                }
+                Spacer(Modifier.height(8.dp))
+                ActionButton(text = "Create new chat", primary = true, enabled = true, onClick = onNew)
             }
         } else {
+            val seenMessageIds = rememberSaveable { mutableStateOf(setOf<String>()) }
             LazyColumn(
                 state = listState,
                 modifier = Modifier
@@ -697,8 +767,19 @@ private fun ChatScreen(
             ) {
                 item { Spacer(Modifier.height(8.dp)) }
                 items(messages, key = { it.id }) { msg ->
+                    val isNewMessage = remember(msg.id) { msg.id !in seenMessageIds.value }
+                    if (isNewMessage) {
+                        SideEffect { seenMessageIds.value = seenMessageIds.value + msg.id }
+                    }
                     MessageRow(
+                        modifier = Modifier.animateItem(
+                            fadeInSpec = null,
+                            placementSpec = FridayMotion.SnappyPlacement,
+                            fadeOutSpec = tween(FridayMotion.Quick)
+                        ),
                         message = msg,
+                        enterAnimation = isNewMessage,
+                        showTyping = state.isGenerating && msg.isStreaming && msg.content.isBlank(),
                         onCopy = {
                             clipboard.setText(AnnotatedString(msg.content))
                             Toast.makeText(context, "Copied", Toast.LENGTH_SHORT).show()
@@ -716,12 +797,43 @@ private fun ChatScreen(
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun MessageRow(message: ChatMessage, onCopy: () -> Unit, onEdit: (() -> Unit)? = null, onSpeak: (() -> Unit)? = null, speaking: Boolean = false) {
+private fun MessageRow(
+    modifier: Modifier = Modifier,
+    message: ChatMessage,
+    enterAnimation: Boolean = false,
+    showTyping: Boolean = false,
+    onCopy: () -> Unit,
+    onEdit: (() -> Unit)? = null,
+    onSpeak: (() -> Unit)? = null,
+    speaking: Boolean = false
+) {
     val isUser = message.role == ChatRole.USER
+    val reducedMotion = rememberReducedMotion()
+
+    // Mount entrance: user bubbles slide up 12dp + fade (240ms); assistant
+    // messages fade only (220ms, no vertical jitter). Driven from a single
+    // Animatable read inside graphicsLayer; never re-triggered while
+    // streaming state flips because the item keeps its identity.
+    val entrance = remember { Animatable(if (enterAnimation && !reducedMotion) 0f else 1f) }
+    LaunchedEffect(Unit) {
+        if (enterAnimation && !reducedMotion && entrance.value < 1f) {
+            entrance.animateTo(
+                1f,
+                tween(durationMillis = if (isUser) 240 else 220, easing = FridayMotion.Emphasized)
+            )
+        }
+    }
+
     Row(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp),
+            .padding(horizontal = 12.dp)
+            .graphicsLayer {
+                alpha = entrance.value
+                if (isUser) {
+                    translationY = (1f - entrance.value) * 12.dp.toPx()
+                }
+            },
         horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start
     ) {
         if (!isUser) {
@@ -730,31 +842,57 @@ private fun MessageRow(message: ChatMessage, onCopy: () -> Unit, onEdit: (() -> 
                     .padding(top = 4.dp, end = 8.dp)
                     .size(28.dp)
                     .clip(RoundedCornerShape(8.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
-                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp)),
+                    .background(ObsidianSurfaceElevated)
+                    .border(1.dp, SpecularHighlightSubtle, RoundedCornerShape(8.dp)),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     Icons.Default.SmartToy,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    tint = StarkCyanPrimary,
                     modifier = Modifier.size(16.dp)
                 )
             }
         }
 
-        val bg = when {
-            isUser -> MaterialTheme.colorScheme.primaryContainer
-            message.isError -> MaterialTheme.colorScheme.error.copy(alpha = 0.12f)
-            else -> MaterialTheme.colorScheme.surface
+        val bubbleShape = if (isUser) {
+            RoundedCornerShape(topStart = 20.dp, topEnd = 6.dp, bottomStart = 20.dp, bottomEnd = 20.dp)
+        } else {
+            RoundedCornerShape(topStart = 6.dp, topEnd = 20.dp, bottomStart = 20.dp, bottomEnd = 20.dp)
         }
-        val border = if (isUser) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.outlineVariant
         Column(
             modifier = Modifier
                 .widthIn(max = 320.dp)
-                .clip(RoundedCornerShape(14.dp))
-                .background(bg)
-                .border(1.dp, border, RoundedCornerShape(14.dp))
+                .clip(bubbleShape)
+                .then(
+                    when {
+                        isUser -> Modifier.background(
+                            brush = Brush.verticalGradient(
+                                colors = listOf(UserBubbleGradientTop, UserBubbleGradientBottom)
+                            ),
+                            shape = bubbleShape
+                        )
+                        message.isError -> Modifier.background(
+                            color = MaterialTheme.colorScheme.error.copy(alpha = 0.12f),
+                            shape = bubbleShape
+                        )
+                        else -> Modifier.background(
+                            brush = Brush.verticalGradient(
+                                colors = listOf(ObsidianSurfaceElevated, ObsidianSurfaceColor)
+                            ),
+                            shape = bubbleShape
+                        )
+                    }
+                )
+                .border(
+                    width = 1.dp,
+                    color = when {
+                        isUser -> CyanBorderGlow
+                        message.isError -> MaterialTheme.colorScheme.error.copy(alpha = 0.35f)
+                        else -> SpecularHighlightSubtle
+                    },
+                    shape = bubbleShape
+                )
                 .combinedClickable(onClick = { if (isUser) onEdit?.invoke() }, onLongClick = onCopy)
                 .padding(horizontal = 12.dp, vertical = 10.dp)
         ) {
@@ -763,23 +901,22 @@ private fun MessageRow(message: ChatMessage, onCopy: () -> Unit, onEdit: (() -> 
                     Text(
                         text = "F.R.I.D.A.Y",
                         style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, fontFamily = FridayDisplayFont),
-                        color = MaterialTheme.colorScheme.primary,
+                        color = StarkCyanPrimary,
                         modifier = Modifier.weight(1f)
                     )
                     if (message.content.isNotBlank() && !message.isStreaming) {
                         Icon(
                             Icons.Default.ContentCopy,
                             contentDescription = "Copy",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            tint = TextSecondary,
                             modifier = Modifier.size(14.dp).clickable { onCopy() }
                         )
                         if (onSpeak != null) {
                             Spacer(Modifier.width(8.dp))
-                            Icon(
-                                if (speaking) Icons.AutoMirrored.Filled.VolumeUp else Icons.AutoMirrored.Filled.VolumeOff,
-                                contentDescription = if (speaking) "Stop speaking" else "Speak",
-                                tint = if (speaking) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(14.dp).clickable { onSpeak() }
+                            SpeakIndicator(
+                                speaking = speaking,
+                                reducedMotion = reducedMotion,
+                                onSpeak = onSpeak
                             )
                         }
                     }
@@ -789,26 +926,93 @@ private fun MessageRow(message: ChatMessage, onCopy: () -> Unit, onEdit: (() -> 
                 Text(
                     text = "Tap to edit and resend, long press to copy",
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = TextTertiary
                 )
                 Spacer(Modifier.height(4.dp))
             }
-            val display = if (message.content.isBlank() && message.isStreaming) "Thinking..." else message.content
-            if (!isUser && !message.isError && display.isNotBlank() && !message.isStreaming) {
-                Markdown(
-                    content = display,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            } else {
-                Text(
-                    text = display,
-                    color = if (message.isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
-                    style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp, fontFamily = if (!isUser && (display.contains("```") || display.contains("\n    "))) FontFamily.Monospace else FontFamily.Default)
-                )
+            AnimatedContent(
+                targetState = showTyping,
+                transitionSpec = {
+                    fadeIn(tween(FridayMotion.Quick)).togetherWith(fadeOut(tween(FridayMotion.Micro)))
+                },
+                label = "assistantTyping"
+            ) { typing ->
+                if (typing) {
+                    Box(modifier = Modifier.padding(vertical = 6.dp)) {
+                        TypingDots()
+                    }
+                } else if (!isUser && !message.isError && message.content.isNotBlank() && !message.isStreaming) {
+                    Markdown(
+                        content = message.content,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                } else {
+                    Text(
+                        text = message.content,
+                        color = if (message.isError) MaterialTheme.colorScheme.error else TextPrimary,
+                        style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp, fontFamily = if (!isUser && (message.content.contains("```") || message.content.contains("\n    "))) FontFamily.Monospace else FontFamily.Default)
+                    )
+                }
             }
             if (message.isStreaming && message.content.isNotBlank()) {
                 Spacer(Modifier.height(4.dp))
-                Text("Streaming...", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Streaming...", style = MaterialTheme.typography.labelSmall, color = TextSecondary)
+            }
+        }
+    }
+}
+
+@Composable
+private fun SpeakIndicator(
+    speaking: Boolean,
+    reducedMotion: Boolean,
+    onSpeak: () -> Unit
+) {
+    val halo = rememberInfiniteTransition(label = "speakHalo")
+    val haloPhase by halo.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 900, easing = LinearEasing)
+        ),
+        label = "speakHaloPhase"
+    )
+    Box(
+        modifier = Modifier
+            .size(18.dp)
+            .graphicsLayer {
+                val pulse = if (speaking && !reducedMotion) lerp(1f, 1.08f, haloPhase) else 1f
+                scaleX = pulse
+                scaleY = pulse
+            }
+            .clickable { onSpeak() }
+            .semantics {
+                contentDescription = if (speaking) "Stop speaking" else "Speak"
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        AnimatedContent(
+            targetState = speaking,
+            transitionSpec = {
+                (
+                    fadeIn(tween(FridayMotion.Quick)) +
+                        scaleIn(initialScale = 0.85f, animationSpec = tween(FridayMotion.Quick))
+                    ).togetherWith(
+                    fadeOut(tween(FridayMotion.Micro)) +
+                        scaleOut(targetScale = 0.85f, animationSpec = tween(FridayMotion.Micro))
+                )
+            },
+            label = "speakIndicator"
+        ) { active ->
+            if (active) {
+                VoiceWaveform(barCount = 4, barWidth = 2.dp, maxHeight = 12.dp)
+            } else {
+                Icon(
+                    Icons.AutoMirrored.Filled.VolumeOff,
+                    contentDescription = null,
+                    tint = TextSecondary,
+                    modifier = Modifier.size(14.dp)
+                )
             }
         }
     }
@@ -849,6 +1053,7 @@ private fun ComposerBar(
     onStop: () -> Unit,
     onMic: () -> Unit
 ) {
+    var focused by remember { mutableStateOf(false) }
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -856,88 +1061,282 @@ private fun ComposerBar(
             .navigationBarsPadding()
             .imePadding()
     ) {
-        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.Bottom
         ) {
-            Box(
+            ObsidianSurface(
                 modifier = Modifier
                     .weight(1f)
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(MaterialTheme.colorScheme.surface)
-                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(16.dp))
-                    .padding(horizontal = 14.dp, vertical = 12.dp)
+                    .animateContentSize(FridayMotion.SnappySize),
+                shape = RoundedCornerShape(26.dp),
+                isHighlighted = focused
             ) {
                 if (value.isBlank()) {
                     Text(
                         text = if (isGenerating) "Generating..." else "Message F.R.I.D.A.Y...",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        style = MaterialTheme.typography.bodyMedium
+                        color = TextTertiary,
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp)
                     )
                 }
                 BasicTextField(
                     value = value,
                     onValueChange = onValueChange,
                     enabled = !isGenerating,
-                    textStyle = TextStyle(color = MaterialTheme.colorScheme.onSurface, fontSize = 14.sp, lineHeight = 20.sp),
-                    cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                    modifier = Modifier.fillMaxWidth(),
+                    textStyle = TextStyle(color = TextPrimary, fontSize = 14.sp, lineHeight = 20.sp),
+                    cursorBrush = SolidColor(StarkCyanPrimary),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .onFocusChanged { focused = it.isFocused }
+                        .padding(horizontal = 18.dp, vertical = 14.dp),
                     maxLines = 6
                 )
             }
             Spacer(Modifier.width(8.dp))
-            if (isGenerating) {
-                Box(
-                    modifier = Modifier
-                        .size(44.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(MaterialTheme.colorScheme.error)
-                        .clickable { onStop() },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        Icons.Default.Close,
-                        contentDescription = "Stop",
-                        tint = MaterialTheme.colorScheme.onError,
-                        modifier = Modifier.size(20.dp)
-                    )
+            ComposerActionButton(
+                isGenerating = isGenerating,
+                canSend = value.isNotBlank(),
+                onSend = onSend,
+                onStop = onStop,
+                onMic = onMic
+            )
+        }
+    }
+}
+
+private enum class ComposerAction { MIC, SEND, STOP }
+
+/**
+ * Kinetic composer action: one 44dp tactile target whose pill morphs between
+ * Mic (empty input), Send (gradient cyan pill, dark icon) and Stop (crimson
+ * glass pill, stop square) via AnimatedContent, with 0.90f press compression.
+ */
+@Composable
+private fun ComposerActionButton(
+    isGenerating: Boolean,
+    canSend: Boolean,
+    onSend: () -> Unit,
+    onStop: () -> Unit,
+    onMic: () -> Unit
+) {
+    val action = when {
+        isGenerating -> ComposerAction.STOP
+        canSend -> ComposerAction.SEND
+        else -> ComposerAction.MIC
+    }
+    val enabled = when (action) {
+        ComposerAction.STOP -> true
+        ComposerAction.SEND -> canSend
+        ComposerAction.MIC -> true
+    }
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val pressScale by animateFloatAsState(
+        targetValue = if (pressed) 0.90f else 1f,
+        animationSpec = FridayMotion.Snappy,
+        label = "composerActionPress"
+    )
+
+    Box(
+        modifier = Modifier
+            .size(44.dp)
+            .graphicsLayer {
+                scaleX = pressScale
+                scaleY = pressScale
+            }
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                enabled = enabled
+            ) {
+                when (action) {
+                    ComposerAction.STOP -> onStop()
+                    ComposerAction.SEND -> onSend()
+                    ComposerAction.MIC -> onMic()
                 }
-            } else {
-                Box(
-                    modifier = Modifier
-                        .size(44.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(MaterialTheme.colorScheme.surfaceVariant)
-                        .clickable { onMic() },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        Icons.Default.Mic,
-                        contentDescription = "Speak input",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-                Spacer(Modifier.width(8.dp))
-                val canSend = value.isNotBlank()
-                Box(
-                    modifier = Modifier
-                        .size(44.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(if (canSend) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant)
-                        .clickable(enabled = canSend) { onSend() },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        AnimatedContent(
+            targetState = action,
+            transitionSpec = {
+                (
+                    scaleIn(initialScale = 0.78f, animationSpec = tween(FridayMotion.Quick)) +
+                        fadeIn(tween(FridayMotion.Quick))
+                    ).togetherWith(
+                    scaleOut(targetScale = 0.78f, animationSpec = tween(FridayMotion.Micro)) +
+                        fadeOut(tween(FridayMotion.Micro))
+                )
+            },
+            label = "composerAction"
+        ) { target ->
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .then(
+                        when (target) {
+                            ComposerAction.SEND -> Modifier.background(
+                                brush = Brush.verticalGradient(
+                                    colors = listOf(StarkCyanPrimary, StarkCyanDeep)
+                                ),
+                                shape = RoundedCornerShape(14.dp)
+                            )
+                            ComposerAction.STOP -> Modifier
+                                .background(TelemetryCrimson.copy(alpha = 0.18f), RoundedCornerShape(14.dp))
+                                .border(1.dp, TelemetryCrimson.copy(alpha = 0.40f), RoundedCornerShape(14.dp))
+                            ComposerAction.MIC -> Modifier
+                                .background(ObsidianSurfaceElevated, RoundedCornerShape(14.dp))
+                                .border(1.dp, SpecularHighlightSubtle, RoundedCornerShape(14.dp))
+                        }
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                when (target) {
+                    ComposerAction.SEND -> Icon(
                         Icons.AutoMirrored.Filled.Send,
                         contentDescription = "Send",
-                        tint = if (canSend) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        tint = LegacyOnPrimaryDark,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    ComposerAction.STOP -> Box(
+                        modifier = Modifier
+                            .size(12.dp)
+                            .clip(RoundedCornerShape(3.dp))
+                            .background(TelemetryCrimson)
+                    )
+                    ComposerAction.MIC -> Icon(
+                        Icons.Default.Mic,
+                        contentDescription = "Speak input",
+                        tint = TextSecondary,
                         modifier = Modifier.size(20.dp)
                     )
                 }
+            }
+        }
+    }
+}
+
+/**
+ * Ultra-slow breathing radial aura behind the empty-state emblem
+ * (scale 1.0 <-> 1.03, alpha 0.12 <-> 0.24, 3400ms OpticalEase). Static under
+ * reduced motion; animated values read only inside graphicsLayer/draw.
+ */
+@Composable
+private fun BreathingAura(modifier: Modifier = Modifier, reducedMotion: Boolean) {
+    val transition = rememberInfiniteTransition(label = "breathingAura")
+    val scale by transition.animateFloat(
+        initialValue = 1f,
+        targetValue = 1.03f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 3400, easing = FridayMotion.OpticalEase),
+            repeatMode = androidx.compose.animation.core.RepeatMode.Reverse
+        ),
+        label = "auraScale"
+    )
+    val alpha by transition.animateFloat(
+        initialValue = 0.12f,
+        targetValue = 0.24f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 3400, easing = FridayMotion.OpticalEase),
+            repeatMode = androidx.compose.animation.core.RepeatMode.Reverse
+        ),
+        label = "auraAlpha"
+    )
+    Box(
+        modifier = modifier
+            .graphicsLayer {
+                if (reducedMotion) {
+                    scaleX = 1f
+                    scaleY = 1f
+                    this.alpha = 0.16f
+                } else {
+                    scaleX = scale
+                    scaleY = scale
+                    this.alpha = alpha
+                }
+            }
+            .drawWithCache {
+                val aura = Brush.radialGradient(
+                    colors = listOf(
+                        StarkCyanPrimary.copy(alpha = 0.20f),
+                        Color.Transparent
+                    ),
+                    center = Offset(size.width / 2f, size.height / 2f),
+                    radius = size.minDimension / 2f
+                )
+                onDrawBehind { drawCircle(brush = aura) }
+            }
+    )
+}
+
+/**
+ * Starter prompt card: 55ms staggered rise-in, cyan border flash on press
+ * before submitting the prompt.
+ */
+@Composable
+private fun PromptCard(
+    text: String,
+    index: Int,
+    reducedMotion: Boolean,
+    onSubmit: () -> Unit
+) {
+    var visible by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        if (reducedMotion) {
+            visible = true
+        } else {
+            delay(index * 55L)
+            visible = true
+        }
+    }
+    var flashed by remember { mutableStateOf(false) }
+    LaunchedEffect(flashed) {
+        if (flashed) {
+            delay(120)
+            onSubmit()
+        }
+    }
+    val entrance by animateFloatAsState(
+        targetValue = if (visible) 1f else 0f,
+        animationSpec = tween(durationMillis = 320, easing = FridayMotion.Emphasized),
+        label = "promptCardEntrance"
+    )
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .graphicsLayer {
+                alpha = entrance
+                translationY = (1f - entrance) * 14.dp.toPx()
+            }
+    ) {
+        ObsidianSurface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            isHighlighted = flashed,
+            onClick = { if (!flashed) flashed = true }
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    Icons.AutoMirrored.Filled.Send,
+                    contentDescription = null,
+                    tint = StarkCyanPrimary,
+                    modifier = Modifier.size(14.dp)
+                )
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    text = text,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = TextPrimary
+                )
             }
         }
     }

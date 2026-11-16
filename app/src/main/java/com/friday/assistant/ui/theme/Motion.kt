@@ -15,6 +15,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 
 /**
  * [CubicBezierEasing] wrapper with an `operator fun invoke` so curves can be
@@ -73,6 +74,7 @@ object FridayMotion {
     val LogoPop = spring<Float>(dampingRatio = 0.60f, stiffness = 260f)
     val Snappy = spring<Float>(dampingRatio = 0.82f, stiffness = 450f)
     val SnappyPlacement = spring<IntOffset>(dampingRatio = 0.82f, stiffness = 450f)
+    val SnappySize = spring<IntSize>(dampingRatio = 0.82f, stiffness = 450f)
     val SpatialSlide = spring<IntOffset>(dampingRatio = 0.88f, stiffness = 360f)
 
     // Shared specular gradient anchors
