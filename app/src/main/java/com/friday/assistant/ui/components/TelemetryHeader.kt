@@ -157,7 +157,8 @@ fun TelemetryHeader(
             StatusPill(
                 status = status,
                 isGenerating = isGenerating,
-                reducedMotion = reducedMotion
+                reducedMotion = reducedMotion,
+                modifier = Modifier.weight(1f, fill = false)
             )
             if (onRegenerate != null) {
                 IconButton(onClick = onRegenerate, enabled = regenerateEnabled) {
