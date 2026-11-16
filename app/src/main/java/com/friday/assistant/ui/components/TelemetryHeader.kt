@@ -94,14 +94,15 @@ fun TelemetryHeader(
             .background(ObsidianSurfaceGlass)
             .drawWithCache {
                 val hairline = 1.dp.toPx()
+                val hairlineBrush = Brush.verticalGradient(
+                    colors = listOf(SpecularHighlightSubtle, Color(0x08FFFFFF)),
+                    startY = size.height - hairline * 6f,
+                    endY = size.height
+                )
                 onDrawBehind {
                     // Bottom specular hairline
                     drawRect(
-                        brush = Brush.verticalGradient(
-                            colors = listOf(SpecularHighlightSubtle, Color(0x08FFFFFF)),
-                            startY = size.height - hairline * 6f,
-                            endY = size.height
-                        ),
+                        brush = hairlineBrush,
                         topLeft = Offset(0f, size.height - hairline),
                         size = androidx.compose.ui.geometry.Size(size.width, hairline)
                     )

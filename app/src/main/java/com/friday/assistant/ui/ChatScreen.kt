@@ -88,7 +88,6 @@ import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDrawerState
@@ -125,8 +124,6 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -144,7 +141,6 @@ import com.friday.assistant.data.GenerationMetrics
 import com.friday.assistant.data.InferenceMode
 import com.friday.assistant.data.MemoryItem
 import com.friday.assistant.data.ModelStatus
-import com.friday.assistant.data.PersonaConfig
 import com.friday.assistant.ui.theme.FridayDisplayFont
 import com.friday.assistant.ui.screens.PreparingScreen
 import com.friday.assistant.ui.screens.SettingsScreen
@@ -290,13 +286,17 @@ fun FridayApp(viewModel: ChatViewModel) {
                                     .width(320.dp)
                                     .fillMaxHeight()
                                     .drawWithCache {
+                                        val hairlineX = size.width - 0.5f
+                                        val hairlineStart = Offset(hairlineX, 0f)
+                                        val hairlineEnd = Offset(hairlineX, size.height)
+                                        val hairlineStroke = 1.dp.toPx()
                                         onDrawBehind {
                                             // Right-edge specular hairline
                                             drawLine(
                                                 color = SpecularHighlightSubtle,
-                                                start = Offset(size.width - 0.5f, 0f),
-                                                end = Offset(size.width - 0.5f, size.height),
-                                                strokeWidth = 1.dp.toPx()
+                                                start = hairlineStart,
+                                                end = hairlineEnd,
+                                                strokeWidth = hairlineStroke
                                             )
                                         }
                                     },
@@ -1148,6 +1148,13 @@ private fun ComposerActionButton(
             .graphicsLayer {
                 scaleX = pressScale
                 scaleY = pressScale
+            }
+            .semantics {
+                contentDescription = when (action) {
+                    ComposerAction.STOP -> "Stop generating"
+                    ComposerAction.SEND -> "Send message"
+                    ComposerAction.MIC -> "Voice input"
+                }
             }
             .clickable(
                 interactionSource = interactionSource,
