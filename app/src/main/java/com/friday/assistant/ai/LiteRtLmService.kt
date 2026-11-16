@@ -219,32 +219,91 @@ class LiteRtLmService(private val appContext: Context) {
         return if (streaming) text.trimStart('\n', '\r') else text.trim()
     }
 
+    data class BundledCopyProgress(
+        val fileName: String,
+        val fileIndex: Int,
+        val fileCount: Int,
+        val bytesCopied: Long,
+        val bytesTotal: Long?
+    )
+
     companion object {
         private const val BUNDLED_ASSET_DIR = "models"
 
-        suspend fun ensureBundledModel(context: Context): String? = withContext(Dispatchers.IO) {
-            ensureBundledModels(context)
+        suspend fun ensureBundledModel(
+            context: Context,
+            onProgress: ((BundledCopyProgress) -> Unit)? = null
+        ): String? = withContext(Dispatchers.IO) {
+            ensureBundledModels(context, onProgress)
             val copied = listAvailableModels(context)
             copied.firstOrNull { it.substringAfterLast('/').startsWith("Qwen3", ignoreCase = true) }
                 ?: copied.firstOrNull()
         }
 
-        private fun ensureBundledModels(context: Context) {
+        private fun ensureBundledModels(
+            context: Context,
+            onProgress: ((BundledCopyProgress) -> Unit)? = null
+        ) {
             val assets = runCatching { context.assets.list(BUNDLED_ASSET_DIR)?.toList().orEmpty() }
                 .getOrDefault(emptyList())
                 .filter { it.endsWith(".litertlm", ignoreCase = true) }
             if (assets.isEmpty()) return
             val outDir = File(context.filesDir, "models").apply { mkdirs() }
-            for (bundledName in assets) {
+            val pending = assets.filter { name ->
+                val outFile = File(outDir, name)
+                !(outFile.exists() && outFile.length() > 0L)
+            }
+            if (pending.isEmpty()) return
+            pending.forEachIndexed { index, bundledName ->
                 val outFile = File(outDir, bundledName)
-                if (outFile.exists() && outFile.length() > 0L) continue
-                Log.i("FRIDAY", "MODEL: copying bundled $bundledName")
+                Log.i("FRIDAY", "MODEL: copying bundled $bundledName (${index + 1}/${pending.size})")
                 val tmp = File(outDir, "$bundledName.tmp")
+                val total = runCatching {
+                    context.assets.openFd("$BUNDLED_ASSET_DIR/$bundledName").use { it.length }
+                }.getOrNull()
                 try {
+                    onProgress?.invoke(
+                        BundledCopyProgress(
+                            fileName = bundledName,
+                            fileIndex = index + 1,
+                            fileCount = pending.size,
+                            bytesCopied = 0L,
+                            bytesTotal = total
+                        )
+                    )
                     context.assets.open("$BUNDLED_ASSET_DIR/$bundledName").use { input ->
                         FileOutputStream(tmp).use { output ->
-                            input.copyTo(output)
+                            val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                            var copied = 0L
+                            var lastReport = 0L
+                            while (true) {
+                                val read = input.read(buffer)
+                                if (read <= 0) break
+                                output.write(buffer, 0, read)
+                                copied += read
+                                if (copied - lastReport >= 4L * 1024L * 1024L || read < buffer.size) {
+                                    lastReport = copied
+                                    onProgress?.invoke(
+                                        BundledCopyProgress(
+                                            fileName = bundledName,
+                                            fileIndex = index + 1,
+                                            fileCount = pending.size,
+                                            bytesCopied = copied,
+                                            bytesTotal = total
+                                        )
+                                    )
+                                }
+                            }
                             output.flush()
+                            onProgress?.invoke(
+                                BundledCopyProgress(
+                                    fileName = bundledName,
+                                    fileIndex = index + 1,
+                                    fileCount = pending.size,
+                                    bytesCopied = copied,
+                                    bytesTotal = total ?: copied
+                                )
+                            )
                         }
                     }
                     if (outFile.exists()) outFile.delete()
@@ -271,8 +330,11 @@ class LiteRtLmService(private val appContext: Context) {
             .distinct()
             .sorted()
 
-        suspend fun discoverDefaultModelPath(context: Context): String? = withContext(Dispatchers.IO) {
-            ensureBundledModels(context)
+        suspend fun discoverDefaultModelPath(
+            context: Context,
+            onProgress: ((BundledCopyProgress) -> Unit)? = null
+        ): String? = withContext(Dispatchers.IO) {
+            ensureBundledModels(context, onProgress)
             val found = listAvailableModels(context)
             found.firstOrNull { it.substringAfterLast('/').startsWith("Qwen3", ignoreCase = true) }
                 ?: found.firstOrNull()

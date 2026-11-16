@@ -60,6 +60,7 @@ import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
@@ -110,6 +111,7 @@ import com.friday.assistant.data.MemoryItem
 import com.friday.assistant.data.ModelStatus
 import com.friday.assistant.data.PersonaConfig
 import com.friday.assistant.ui.theme.FridayDisplayFont
+import com.friday.assistant.ai.LiteRtLmService
 import com.mikepenz.markdown.m3.Markdown
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -119,6 +121,10 @@ import kotlinx.coroutines.withContext
 @Composable
 fun FridayApp(viewModel: ChatViewModel) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    state.bundledCopyProgress?.let { progress ->
+        BundledCopyScreen(progress = progress)
+        return
+    }
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val keyboardController = LocalSoftwareKeyboardController.current
@@ -1543,5 +1549,73 @@ private fun ActionButton(text: String, primary: Boolean, enabled: Boolean, onCli
             .padding(horizontal = 14.dp, vertical = 10.dp)
     ) {
         Text(text, color = if (enabled) fg else MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelLarge)
+    }
+}
+
+@Composable
+private fun BundledCopyScreen(progress: LiteRtLmService.BundledCopyProgress) {
+    val copiedMb = progress.bytesCopied / (1024f * 1024f)
+    val totalMb = progress.bytesTotal?.div(1024f * 1024f)
+    val fraction = progress.bytesTotal?.takeIf { it > 0 }?.let { (progress.bytesCopied.toFloat() / it.toFloat()).coerceIn(0f, 1f) }
+    val detail = buildString {
+        append("Model ${progress.fileIndex} of ${progress.fileCount}: ${progress.fileName}")
+        append("\n")
+        if (totalMb != null) {
+            append(String.format(Locale.US, "%.0f / %.0f MB", copiedMb, totalMb))
+        } else {
+            append(String.format(Locale.US, "%.0f MB copied", copiedMb))
+        }
+    }
+    Scaffold(containerColor = MaterialTheme.colorScheme.background) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .padding(horizontal = 24.dp),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Image(
+                painter = painterResource(id = R.drawable.friday_logo_blue),
+                contentDescription = "F.R.I.D.A.Y logo",
+                modifier = Modifier.size(96.dp)
+            )
+            Spacer(Modifier.height(20.dp))
+            Text(
+                text = "Preparing F.R.I.D.A.Y",
+                style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold, fontFamily = FridayDisplayFont),
+                color = MaterialTheme.colorScheme.primary
+            )
+            Spacer(Modifier.height(10.dp))
+            Text(
+                text = "Copying bundled models for first launch. This can take several minutes and only happens once.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(24.dp))
+            if (fraction != null) {
+                LinearProgressIndicator(
+                    progress = { fraction },
+                    modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(999.dp))
+                )
+            } else {
+                LinearProgressIndicator(
+                    modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(999.dp))
+                )
+            }
+            Spacer(Modifier.height(12.dp))
+            Text(
+                text = detail,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = "Keep the app open while setup finishes.",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
     }
 }
