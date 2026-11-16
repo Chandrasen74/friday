@@ -1,14 +1,24 @@
 package com.friday.assistant.ui
 
-import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.speech.RecognizerIntent
-import android.view.WindowManager
 import android.widget.Toast
+import androidx.activity.BackEventCompat
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.PredictiveBackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -17,6 +27,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -58,11 +69,12 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DrawerState
 import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
@@ -73,7 +85,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -85,15 +96,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
-import androidx.compose.ui.platform.LocalView
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -103,6 +115,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.util.lerp
 import androidx.compose.ui.ExperimentalComposeUiApi
 import java.util.Locale
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -117,19 +130,29 @@ import com.friday.assistant.data.MemoryItem
 import com.friday.assistant.data.ModelStatus
 import com.friday.assistant.data.PersonaConfig
 import com.friday.assistant.ui.theme.FridayDisplayFont
-import com.friday.assistant.ai.LiteRtLmService
+import com.friday.assistant.ui.screens.PreparingScreen
+import com.friday.assistant.ui.theme.FridayMotion
+import com.friday.assistant.ui.theme.ObsidianVoid
 import com.mikepenz.markdown.m3.Markdown
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+
+private sealed interface AppDestination {
+    data object Preparing : AppDestination
+    data object Chat : AppDestination
+    data object Settings : AppDestination
+}
 
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun FridayApp(viewModel: ChatViewModel) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
-    state.bundledCopyProgress?.let { progress ->
-        BundledCopyScreen(progress = progress)
-        return
+    val destination = when {
+        state.bundledCopyProgress != null -> AppDestination.Preparing
+        state.settingsOpen -> AppDestination.Settings
+        else -> AppDestination.Chat
     }
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
@@ -158,72 +181,106 @@ fun FridayApp(viewModel: ChatViewModel) {
         }
     }
 
-    BackHandler(enabled = drawerState.isOpen || state.settingsOpen || state.chatsStorageOpen || state.personaMemoryOpen) {
-        when {
-            drawerState.isOpen -> scope.launch { drawerState.close() }
-            state.settingsOpen && state.personaMemoryOpen -> viewModel.openPersonaMemory(false)
-            state.settingsOpen && state.chatsStorageOpen -> viewModel.openChatsStorage(false)
-            state.settingsOpen -> viewModel.toggleSettings(false)
-        }
+    BackHandler(enabled = drawerState.isOpen) {
+        scope.launch { drawerState.close() }
     }
 
-    ModalNavigationDrawer(
-        drawerState = drawerState,
-        gesturesEnabled = !state.settingsOpen,
-        drawerContent = {
-            ModalDrawerSheet(
-                modifier = Modifier
-                    .width(320.dp)
-                    .fillMaxHeight(),
-                drawerContainerColor = MaterialTheme.colorScheme.surface,
-                drawerTonalElevation = 0.dp
-            ) {
-                DrawerContent(
-                    state = state,
-                    onNewSession = {
-                        viewModel.newSession()
-                        scope.launch { drawerState.close() }
-                    },
-                    onSelectSession = {
-                        viewModel.selectSession(it)
-                        scope.launch { drawerState.close() }
-                    },
-                    onDeleteSession = { viewModel.deleteSession(it) },
-                    onOpenSettings = {
-                        viewModel.toggleSettings(true)
-                        scope.launch { drawerState.close() }
+    AnimatedContent(
+        targetState = destination,
+        transitionSpec = {
+            when {
+                initialState == AppDestination.Preparing -> {
+                    (
+                        fadeIn(tween(FridayMotion.Medium, easing = FridayMotion.Emphasized)) +
+                            scaleIn(
+                                initialScale = 0.96f,
+                                animationSpec = tween(FridayMotion.Medium, easing = FridayMotion.Emphasized)
+                            )
+                        ).togetherWith(fadeOut(tween(220)))
+                }
+                targetState == AppDestination.Settings -> {
+                    (
+                        slideInHorizontally(tween(360, easing = FridayMotion.Emphasized)) { it / 4 } +
+                            fadeIn(tween(320))
+                        ).togetherWith(
+                            slideOutHorizontally(tween(360, easing = FridayMotion.Emphasized)) { -it / 12 } +
+                                fadeOut(tween(260)) +
+                                scaleOut(targetScale = 0.98f, animationSpec = tween(360, easing = FridayMotion.Emphasized))
+                        )
+                }
+                else -> {
+                    (
+                        slideInHorizontally(tween(360, easing = FridayMotion.Emphasized)) { -it / 12 } +
+                            fadeIn(tween(320)) +
+                            scaleIn(initialScale = 0.98f, animationSpec = tween(360, easing = FridayMotion.Emphasized))
+                        ).togetherWith(
+                            slideOutHorizontally(tween(360, easing = FridayMotion.Emphasized)) { it / 4 } +
+                                fadeOut(tween(260))
+                        )
+                }
+            }
+        },
+        label = "fridayAppRouter"
+    ) { dest ->
+        when (dest) {
+            AppDestination.Preparing -> {
+                state.bundledCopyProgress?.let { progress ->
+                    PreparingScreen(progress = progress)
+                }
+            }
+            AppDestination.Chat -> {
+                ModalNavigationDrawer(
+                    drawerState = drawerState,
+                    gesturesEnabled = true,
+                    scrimColor = Color.Transparent,
+                    drawerContent = {
+                        ModalDrawerSheet(
+                            modifier = Modifier
+                                .width(320.dp)
+                                .fillMaxHeight(),
+                            drawerContainerColor = MaterialTheme.colorScheme.surface,
+                            drawerTonalElevation = 0.dp
+                        ) {
+                            DrawerContent(
+                                state = state,
+                                onNewSession = {
+                                    viewModel.newSession()
+                                    scope.launch { drawerState.close() }
+                                },
+                                onSelectSession = {
+                                    viewModel.selectSession(it)
+                                    scope.launch { drawerState.close() }
+                                },
+                                onDeleteSession = { viewModel.deleteSession(it) },
+                                onOpenSettings = {
+                                    viewModel.toggleSettings(true)
+                                    scope.launch { drawerState.close() }
+                                }
+                            )
+                        }
                     }
-                )
+                ) {
+                    DrawerDepthBox(drawerState = drawerState) {
+                        ChatScreen(
+                            state = state,
+                            onMenu = {
+                                focusManager.clearFocus()
+                                keyboardController?.hide()
+                                scope.launch { drawerState.open() }
+                            },
+                            onNew = { viewModel.newSession() },
+                            onInputChange = viewModel::onInputChange,
+                            onSend = viewModel::sendMessage,
+                            onStop = viewModel::stopGeneration,
+                            onRegenerate = viewModel::regenerateLastResponse,
+                            onEditMessage = viewModel::startEditMessage,
+                            onMic = { launchSpeechInput() },
+                            onSpeakMessage = viewModel::speakMessage
+                        )
+                    }
+                }
             }
-        }
-    ) {
-        when {
-            state.settingsOpen && state.chatsStorageOpen -> {
-                ChatsStorageScreen(
-                    state = state,
-                    onBack = { viewModel.openChatsStorage(false) },
-                    onClearCurrentChat = viewModel::clearCurrentSession,
-                    onClearAllChats = viewModel::clearAllChats,
-                    onExportChats = viewModel::exportChatsJson,
-                    onImportChats = viewModel::importChatsJson,
-                    onRenameSession = viewModel::renameSession
-                )
-            }
-            state.settingsOpen && state.personaMemoryOpen -> {
-                PersonaMemoryScreen(
-                    state = state,
-                    onBack = { viewModel.openPersonaMemory(false) },
-                    onPersonaPromptChange = viewModel::onPersonaPromptChange,
-                    onResetPersonaPrompt = viewModel::resetPersonaPrompt,
-                    onUseMemoriesChange = viewModel::onUseMemoriesChange,
-                    onAddMemory = viewModel::addMemory,
-                    onUpdateMemory = viewModel::updateMemory,
-                    onDeleteMemory = viewModel::deleteMemory,
-                    onClearMemories = viewModel::clearMemories,
-                    onExtractMemories = viewModel::extractMemoriesFromCurrentChat
-                )
-            }
-            state.settingsOpen -> {
+            AppDestination.Settings -> {
                 SettingsScreen(
                     state = state,
                     onBack = { viewModel.toggleSettings(false) },
@@ -239,28 +296,60 @@ fun FridayApp(viewModel: ChatViewModel) {
                     onApiModelChange = viewModel::onApiModelChange,
                     onSpeakRepliesChange = viewModel::onSpeakRepliesChange,
                     onTestApi = viewModel::testApiEndpoint,
-                    onRefreshModels = viewModel::refreshAvailableModels
-                )
-            }
-            else -> {
-                ChatScreen(
-                    state = state,
-                    onMenu = {
-                        focusManager.clearFocus()
-                        keyboardController?.hide()
-                        scope.launch { drawerState.open() }
-                    },
-                    onNew = { viewModel.newSession() },
-                    onInputChange = viewModel::onInputChange,
-                    onSend = viewModel::sendMessage,
-                    onStop = viewModel::stopGeneration,
-                    onRegenerate = viewModel::regenerateLastResponse,
-                    onEditMessage = viewModel::startEditMessage,
-                    onMic = { launchSpeechInput() },
-                    onSpeakMessage = viewModel::speakMessage
+                    onRefreshModels = viewModel::refreshAvailableModels,
+                    onBackPersona = { viewModel.openPersonaMemory(false) },
+                    onBackChats = { viewModel.openChatsStorage(false) },
+                    onClearCurrentChat = viewModel::clearCurrentSession,
+                    onClearAllChats = viewModel::clearAllChats,
+                    onExportChats = viewModel::exportChatsJson,
+                    onImportChats = viewModel::importChatsJson,
+                    onRenameSession = viewModel::renameSession,
+                    onPersonaPromptChange = viewModel::onPersonaPromptChange,
+                    onResetPersonaPrompt = viewModel::resetPersonaPrompt,
+                    onUseMemoriesChange = viewModel::onUseMemoriesChange,
+                    onAddMemory = viewModel::addMemory,
+                    onUpdateMemory = viewModel::updateMemory,
+                    onDeleteMemory = viewModel::deleteMemory,
+                    onClearMemories = viewModel::clearMemories,
+                    onExtractMemories = viewModel::extractMemoriesFromCurrentChat
                 )
             }
         }
+    }
+}
+
+/**
+ * Scales and rounds the scaffold content behind the modal drawer while it
+ * opens, with an ObsidianVoid depth scrim replacing the default drawer scrim.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DrawerDepthBox(
+    drawerState: DrawerState,
+    modifier: Modifier = Modifier,
+    content: @Composable BoxScope.() -> Unit
+) {
+    val density = LocalDensity.current
+    val drawerWidthPx = remember(density) { with(density) { 320.dp.toPx() } }
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .graphicsLayer {
+                val fraction = (drawerState.currentOffset / drawerWidthPx).coerceIn(0f, 1f)
+                scaleX = lerp(1f, 0.965f, fraction)
+                scaleY = lerp(1f, 0.965f, fraction)
+                shape = RoundedCornerShape(lerp(0f, 24f, fraction).dp)
+                clip = true
+            }
+            .drawWithContent {
+                drawContent()
+                val fraction = (drawerState.currentOffset / drawerWidthPx).coerceIn(0f, 1f)
+                if (fraction > 0.01f) {
+                    drawRect(ObsidianVoid.copy(alpha = 0.55f * fraction))
+                }
+            }
+    ) {
+        content()
     }
 }
 
@@ -854,8 +943,150 @@ private fun ComposerBar(
     }
 }
 
+private enum class SettingsPage { MAIN, PERSONA_MEMORY, CHATS_STORAGE }
+
+/**
+ * Executive settings host: owns the internal MAIN / PERSONA_MEMORY /
+ * CHATS_STORAGE page router (directional slides) and the Android 14+
+ * predictive back gesture, where the whole settings surface tracks the
+ * user's finger (translation + scale + alpha) before committing the pop.
+ */
 @Composable
 private fun SettingsScreen(
+    state: ChatUiState,
+    onBack: () -> Unit,
+    onOpenChatsStorage: () -> Unit,
+    onOpenPersonaMemory: () -> Unit,
+    onPathChange: (String) -> Unit,
+    onGpuChange: (Boolean) -> Unit,
+    onLoad: () -> Unit,
+    onUnload: () -> Unit,
+    onInferenceModeChange: (InferenceMode) -> Unit,
+    onApiBaseUrlChange: (String) -> Unit,
+    onApiKeyChange: (String) -> Unit,
+    onApiModelChange: (String) -> Unit,
+    onSpeakRepliesChange: (Boolean) -> Unit,
+    onTestApi: () -> Unit,
+    onRefreshModels: () -> Unit,
+    onBackPersona: () -> Unit,
+    onBackChats: () -> Unit,
+    onClearCurrentChat: () -> Unit,
+    onClearAllChats: () -> Unit,
+    onExportChats: () -> String,
+    onImportChats: (String) -> Boolean,
+    onRenameSession: (String, String) -> Unit,
+    onPersonaPromptChange: (String) -> Unit,
+    onResetPersonaPrompt: () -> Unit,
+    onUseMemoriesChange: (Boolean) -> Unit,
+    onAddMemory: (String) -> Unit,
+    onUpdateMemory: (String, String) -> Unit,
+    onDeleteMemory: (String) -> Unit,
+    onClearMemories: () -> Unit,
+    onExtractMemories: () -> Unit
+) {
+    val page = when {
+        state.personaMemoryOpen -> SettingsPage.PERSONA_MEMORY
+        state.chatsStorageOpen -> SettingsPage.CHATS_STORAGE
+        else -> SettingsPage.MAIN
+    }
+
+    val backProgress = remember { Animatable(0f) }
+    PredictiveBackHandler {
+        try {
+            it.collect { event -> backProgress.snapTo(event.progress) }
+            backProgress.snapTo(0f)
+            when (page) {
+                SettingsPage.PERSONA_MEMORY -> onBackPersona()
+                SettingsPage.CHATS_STORAGE -> onBackChats()
+                SettingsPage.MAIN -> onBack()
+            }
+        } catch (e: CancellationException) {
+            backProgress.animateTo(0f, FridayMotion.Snappy)
+            throw e
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .graphicsLayer {
+                val p = backProgress.value
+                translationX = p * size.width * 0.22f
+                scaleX = 1f - (p * 0.03f)
+                scaleY = 1f - (p * 0.03f)
+                alpha = 1f - (p * 0.25f)
+            }
+    ) {
+        AnimatedContent(
+            targetState = page,
+            transitionSpec = {
+                val deeper = targetState.ordinal > initialState.ordinal
+                if (deeper) {
+                    (
+                        slideInHorizontally(tween(FridayMotion.Medium, easing = FridayMotion.Emphasized)) { it / 5 } +
+                            fadeIn(tween(320))
+                        ).togetherWith(
+                            slideOutHorizontally(tween(FridayMotion.Medium, easing = FridayMotion.Emphasized)) { -it / 10 } +
+                                fadeOut(tween(220))
+                        )
+                } else {
+                    (
+                        slideInHorizontally(tween(FridayMotion.Medium, easing = FridayMotion.Emphasized)) { -it / 10 } +
+                            fadeIn(tween(320))
+                        ).togetherWith(
+                            slideOutHorizontally(tween(FridayMotion.Medium, easing = FridayMotion.Emphasized)) { it / 5 } +
+                                fadeOut(tween(220))
+                        )
+                }
+            },
+            label = "settingsPages"
+        ) { current ->
+            when (current) {
+                SettingsPage.MAIN -> SettingsMainPage(
+                    state = state,
+                    onBack = onBack,
+                    onOpenChatsStorage = onOpenChatsStorage,
+                    onOpenPersonaMemory = onOpenPersonaMemory,
+                    onPathChange = onPathChange,
+                    onGpuChange = onGpuChange,
+                    onLoad = onLoad,
+                    onUnload = onUnload,
+                    onInferenceModeChange = onInferenceModeChange,
+                    onApiBaseUrlChange = onApiBaseUrlChange,
+                    onApiKeyChange = onApiKeyChange,
+                    onApiModelChange = onApiModelChange,
+                    onSpeakRepliesChange = onSpeakRepliesChange,
+                    onTestApi = onTestApi,
+                    onRefreshModels = onRefreshModels
+                )
+                SettingsPage.PERSONA_MEMORY -> PersonaMemoryScreen(
+                    state = state,
+                    onBack = onBackPersona,
+                    onPersonaPromptChange = onPersonaPromptChange,
+                    onResetPersonaPrompt = onResetPersonaPrompt,
+                    onUseMemoriesChange = onUseMemoriesChange,
+                    onAddMemory = onAddMemory,
+                    onUpdateMemory = onUpdateMemory,
+                    onDeleteMemory = onDeleteMemory,
+                    onClearMemories = onClearMemories,
+                    onExtractMemories = onExtractMemories
+                )
+                SettingsPage.CHATS_STORAGE -> ChatsStorageScreen(
+                    state = state,
+                    onBack = onBackChats,
+                    onClearCurrentChat = onClearCurrentChat,
+                    onClearAllChats = onClearAllChats,
+                    onExportChats = onExportChats,
+                    onImportChats = onImportChats,
+                    onRenameSession = onRenameSession
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SettingsMainPage(
     state: ChatUiState,
     onBack: () -> Unit,
     onOpenChatsStorage: () -> Unit,
@@ -1555,97 +1786,5 @@ private fun ActionButton(text: String, primary: Boolean, enabled: Boolean, onCli
             .padding(horizontal = 14.dp, vertical = 10.dp)
     ) {
         Text(text, color = if (enabled) fg else MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelLarge)
-    }
-}
-
-@Composable
-private fun BundledCopyScreen(progress: LiteRtLmService.BundledCopyProgress) {
-    val view = LocalView.current
-    val activity = LocalContext.current as? Activity
-    DisposableEffect(view) {
-        view.keepScreenOn = true
-        val window = activity?.window
-        window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        onDispose {
-            view.keepScreenOn = false
-            window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        }
-    }
-    BackHandler {
-        activity?.moveTaskToBack(true)
-    }
-
-    val fraction = LiteRtLmService.copyProgressFraction(progress.bytesCopied, progress.bytesTotal)
-    val detail = buildString {
-        append("Model ${progress.fileIndex} of ${progress.fileCount}: ${progress.fileName}")
-        append('\n')
-        append(LiteRtLmService.formatCopiedBytes(progress.bytesCopied, progress.bytesTotal))
-    }
-    val progressDescription = if (fraction != null) {
-        "Copy progress ${(fraction * 100f).toInt()} percent for ${progress.fileName}"
-    } else {
-        "Copying ${progress.fileName}, ${LiteRtLmService.formatCopiedBytes(progress.bytesCopied, null)}"
-    }
-
-    Scaffold(containerColor = MaterialTheme.colorScheme.background) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 24.dp, vertical = 24.dp),
-            verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Image(
-                painter = painterResource(id = R.drawable.friday_logo_blue),
-                contentDescription = "F.R.I.D.A.Y logo",
-                modifier = Modifier.size(96.dp)
-            )
-            Spacer(Modifier.height(20.dp))
-            Text(
-                text = "Preparing F.R.I.D.A.Y",
-                style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold, fontFamily = FridayDisplayFont),
-                color = MaterialTheme.colorScheme.primary
-            )
-            Spacer(Modifier.height(10.dp))
-            Text(
-                text = "Copying bundled models for first launch. This can take several minutes and only happens once.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(Modifier.height(24.dp))
-            if (fraction != null) {
-                LinearProgressIndicator(
-                    progress = { fraction.coerceIn(0f, 1f) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(8.dp)
-                        .clip(RoundedCornerShape(999.dp))
-                        .semantics { contentDescription = progressDescription }
-                )
-            } else {
-                LinearProgressIndicator(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(8.dp)
-                        .clip(RoundedCornerShape(999.dp))
-                        .semantics { contentDescription = progressDescription }
-                )
-            }
-            Spacer(Modifier.height(12.dp))
-            Text(
-                text = detail,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.fillMaxWidth()
-            )
-            Spacer(Modifier.height(8.dp))
-            Text(
-                text = "Keep the app open while setup finishes. If setup is interrupted, it will resume on the next launch.",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
     }
 }
