@@ -1,8 +1,10 @@
 package com.friday.assistant.ui
 
+import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.speech.RecognizerIntent
+import android.view.WindowManager
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -71,6 +73,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -86,6 +89,9 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.AnnotatedString
@@ -1554,24 +1560,40 @@ private fun ActionButton(text: String, primary: Boolean, enabled: Boolean, onCli
 
 @Composable
 private fun BundledCopyScreen(progress: LiteRtLmService.BundledCopyProgress) {
-    val copiedMb = progress.bytesCopied / (1024f * 1024f)
-    val totalMb = progress.bytesTotal?.div(1024f * 1024f)
-    val fraction = progress.bytesTotal?.takeIf { it > 0 }?.let { (progress.bytesCopied.toFloat() / it.toFloat()).coerceIn(0f, 1f) }
-    val detail = buildString {
-        append("Model ${progress.fileIndex} of ${progress.fileCount}: ${progress.fileName}")
-        append("\n")
-        if (totalMb != null) {
-            append(String.format(Locale.US, "%.0f / %.0f MB", copiedMb, totalMb))
-        } else {
-            append(String.format(Locale.US, "%.0f MB copied", copiedMb))
+    val view = LocalView.current
+    val activity = LocalContext.current as? Activity
+    DisposableEffect(view) {
+        view.keepScreenOn = true
+        val window = activity?.window
+        window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        onDispose {
+            view.keepScreenOn = false
+            window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         }
     }
+    BackHandler {
+        activity?.moveTaskToBack(true)
+    }
+
+    val fraction = LiteRtLmService.copyProgressFraction(progress.bytesCopied, progress.bytesTotal)
+    val detail = buildString {
+        append("Model ${progress.fileIndex} of ${progress.fileCount}: ${progress.fileName}")
+        append('\n')
+        append(LiteRtLmService.formatCopiedBytes(progress.bytesCopied, progress.bytesTotal))
+    }
+    val progressDescription = if (fraction != null) {
+        "Copy progress ${(fraction * 100f).toInt()} percent for ${progress.fileName}"
+    } else {
+        "Copying ${progress.fileName}, ${LiteRtLmService.formatCopiedBytes(progress.bytesCopied, null)}"
+    }
+
     Scaffold(containerColor = MaterialTheme.colorScheme.background) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(horizontal = 24.dp),
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 24.dp, vertical = 24.dp),
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
@@ -1595,12 +1617,20 @@ private fun BundledCopyScreen(progress: LiteRtLmService.BundledCopyProgress) {
             Spacer(Modifier.height(24.dp))
             if (fraction != null) {
                 LinearProgressIndicator(
-                    progress = { fraction },
-                    modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(999.dp))
+                    progress = { fraction.coerceIn(0f, 1f) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(8.dp)
+                        .clip(RoundedCornerShape(999.dp))
+                        .semantics { contentDescription = progressDescription }
                 )
             } else {
                 LinearProgressIndicator(
-                    modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(999.dp))
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(8.dp)
+                        .clip(RoundedCornerShape(999.dp))
+                        .semantics { contentDescription = progressDescription }
                 )
             }
             Spacer(Modifier.height(12.dp))
@@ -1612,7 +1642,7 @@ private fun BundledCopyScreen(progress: LiteRtLmService.BundledCopyProgress) {
             )
             Spacer(Modifier.height(8.dp))
             Text(
-                text = "Keep the app open while setup finishes.",
+                text = "Keep the app open while setup finishes. If setup is interrupted, it will resume on the next launch.",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
