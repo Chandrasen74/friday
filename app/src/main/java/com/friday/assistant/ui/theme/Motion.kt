@@ -4,6 +4,7 @@ import android.database.ContentObserver
 import android.content.Context
 import android.provider.Settings
 import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.Easing
 import androidx.compose.animation.core.spring
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -14,6 +15,24 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.IntOffset
+
+/**
+ * [CubicBezierEasing] wrapper with an `operator fun invoke` so curves can be
+ * sampled inline as `curve(t)` inside draw/graphicsLayer providers, while
+ * still being passed directly as an [Easing] to tween specs.
+ */
+class FridayEase(
+    x1: Float,
+    y1: Float,
+    x2: Float,
+    y2: Float
+) : Easing {
+    private val base = CubicBezierEasing(x1, y1, x2, y2)
+
+    override fun transform(fraction: Float): Float = base.transform(fraction)
+
+    operator fun invoke(fraction: Float): Float = base.transform(fraction)
+}
 
 /**
  * Central motion source of truth: temporal scale, custom curves and
@@ -40,10 +59,15 @@ object FridayMotion {
     const val BootHoldEnd = 1100
     const val BootDockEnd = 1400
 
-    // Custom easing curves
-    val Emphasized = CubicBezierEasing(0.2f, 0.0f, 0.0f, 1.0f)
-    val HudLock = CubicBezierEasing(0.05f, 0.75f, 0.1f, 1.0f)
-    val OpticalEase = CubicBezierEasing(0.4f, 0.0f, 0.2f, 1.0f)
+    // Custom easing curves. FridayEase adds operator invoke for inline sampling.
+    val Emphasized = FridayEase(0.2f, 0.0f, 0.0f, 1.0f)
+    val HudLock = FridayEase(0.05f, 0.75f, 0.1f, 1.0f)
+    val OpticalEase = FridayEase(0.4f, 0.0f, 0.2f, 1.0f)
+
+    // One-bounce overshoot curve used for the emblem ignition (spring-like
+    // feel without a separate Animatable, so the whole boot stays frame-locked
+    // to a single master timeline and can skip instantly).
+    val LogoPopEase = FridayEase(0.34f, 1.56f, 0.64f, 1.0f)
 
     // Springs
     val LogoPop = spring<Float>(dampingRatio = 0.60f, stiffness = 260f)
