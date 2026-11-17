@@ -144,12 +144,15 @@ import com.friday.assistant.data.ApiEndpointConfig
 import com.friday.assistant.data.ChatMessage
 import com.friday.assistant.data.ChatRole
 import com.friday.assistant.data.ChatSession
+import com.friday.assistant.data.InferenceMode
 import com.friday.assistant.data.MemoryItem
 import com.friday.assistant.data.ModelStatus
 import com.friday.assistant.ui.theme.FridayDisplayFont
 import com.friday.assistant.ui.screens.PreparingScreen
 import com.friday.assistant.ui.screens.SettingsScreen
 import com.friday.assistant.ui.screens.ActionButton
+import com.friday.assistant.ui.telemetry.GenerationTelemetryCache
+import com.friday.assistant.ui.telemetry.SavedGenerationMetrics
 import com.friday.assistant.ui.theme.FridayMotion
 import com.friday.assistant.ui.theme.ObsidianVoid
 import com.friday.assistant.ui.components.TelemetryHeader
@@ -630,6 +633,9 @@ private fun ChatScreen(
     val messages = session?.messages.orEmpty()
     val clipboard = LocalClipboardManager.current
     val context = LocalContext.current
+    // Durable telemetry store: survives process death and cold boots, so
+    // historical assistant bubbles keep their metrics footer after restart.
+    val telemetryCache = remember(context) { GenerationTelemetryCache.getInstance(context) }
     val isNearBottom by remember {
         derivedStateOf {
             val layout = listState.layoutInfo
@@ -640,12 +646,12 @@ private fun ChatScreen(
     }
     var prevMessageCount by remember(session?.id) { mutableStateOf(messages.size) }
 
-    // Ephemeral per-message generation telemetry, captured the moment an
-    // assistant message finishes streaming (pure UI state, never persisted;
-    // greetings and restored history never stream while mounted, so they
-    // never get a footer).
+    // Per-message generation telemetry: captured the moment an assistant
+    // message finishes streaming, and mirrored into GenerationTelemetryCache
+    // so restored history keeps its footer across cold boots. Greetings and
+    // restored history never stream while mounted, so they never re-capture.
     val generationFootprints = remember(session?.id) {
-        mutableStateMapOf<String, Pair<Double, Long?>>()
+        mutableStateMapOf<String, SavedGenerationMetrics>()
     }
 
     LaunchedEffect(session?.id) {
@@ -779,10 +785,28 @@ private fun ChatScreen(
                                 msg.content.isNotBlank() &&
                                 (m.tokensPerSec != null || m.totalMs != null)
                             ) {
-                                generationFootprints[msg.id] = Pair(m.tokensPerSec ?: 0.0, m.totalMs)
+                                val backendLabel = when {
+                                    state.inferenceMode == InferenceMode.REMOTE_API -> "REMOTE API"
+                                    state.useGpu -> "LOCAL // GPU"
+                                    else -> "LOCAL // CPU"
+                                }
+                                val saved = SavedGenerationMetrics(
+                                    tokensPerSecond = (m.tokensPerSec ?: 0.0).toFloat(),
+                                    durationMs = m.totalMs ?: 0L,
+                                    modelName = m.modelName.ifBlank {
+                                        state.modelStatus.resolvedPath?.substringAfterLast('/') ?: ""
+                                    },
+                                    backendLabel = backendLabel,
+                                    estimatedTokens = m.estimatedTokens.coerceAtLeast(1)
+                                )
+                                generationFootprints[msg.id] = saved
+                                telemetryCache.put(msg.id, saved)
                             }
                         }
                     }
+                    // Restored history resolves its footer from the durable
+                    // cache; freshly finished generations come from the map.
+                    val cachedFootprint = remember(msg.id) { telemetryCache.get(msg.id) }
                     MessageRow(
                         modifier = Modifier.animateItem(
                             fadeInSpec = null,
@@ -792,7 +816,7 @@ private fun ChatScreen(
                         message = msg,
                         enterAnimation = isNewMessage,
                         showTyping = state.isGenerating && msg.isStreaming && msg.content.isBlank(),
-                        footprint = generationFootprints[msg.id],
+                        footprint = generationFootprints[msg.id] ?: cachedFootprint,
                         onCopy = {
                             clipboard.setText(AnnotatedString(msg.content))
                             Toast.makeText(context, "Copied", Toast.LENGTH_SHORT).show()
@@ -815,7 +839,7 @@ private fun MessageRow(
     message: ChatMessage,
     enterAnimation: Boolean = false,
     showTyping: Boolean = false,
-    footprint: Pair<Double, Long?>? = null,
+    footprint: SavedGenerationMetrics? = null,
     onCopy: () -> Unit,
     onEdit: (() -> Unit)? = null,
     onSpeak: (() -> Unit)? = null,
@@ -1067,11 +1091,14 @@ private fun SpeakIndicator(
 }
 
 /** Formats the captured post-generation telemetry: tok/s and total time. */
-private fun formatFootprint(footprint: Pair<Double, Long?>?): String {
+private fun formatFootprint(footprint: SavedGenerationMetrics?): String {
     if (footprint == null) return ""
-    val (tokensPerSec, totalMs) = footprint
-    val speed = if (tokensPerSec > 0) String.format(Locale.US, "%.1f tok/s", tokensPerSec) else null
-    val duration = totalMs?.takeIf { it > 0 }?.let { ms ->
+    val speed = if (footprint.tokensPerSecond > 0f) {
+        String.format(Locale.US, "%.1f tok/s", footprint.tokensPerSecond)
+    } else {
+        null
+    }
+    val duration = footprint.durationMs.takeIf { it > 0 }?.let { ms ->
         if (ms < 1000) "${ms}ms" else String.format(Locale.US, "%.2fs", ms / 1000.0)
     }
     return listOfNotNull(speed, duration).joinToString("  •  ")
