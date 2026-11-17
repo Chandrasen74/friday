@@ -44,6 +44,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -1025,7 +1026,17 @@ private fun MessageRow(
                         label = "assistantTyping"
                     ) { typing ->
                         if (typing) {
-                            Box(modifier = Modifier.padding(vertical = 6.dp)) {
+                            // Predictable padded bounding box: the dots float
+                            // centered in a stable container so the bubble
+                            // holds its architectural resting size from the
+                            // very first frame, then AnimatedContent's size
+                            // transform eases it into the text height.
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .defaultMinSize(minHeight = 44.dp)
+                                    .wrapContentHeight(Alignment.CenterVertically)
+                            ) {
                                 TypingDots()
                             }
                         } else if (!isUser && !message.isError && message.content.isNotBlank() && !message.isStreaming) {
