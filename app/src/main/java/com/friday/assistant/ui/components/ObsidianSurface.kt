@@ -21,6 +21,7 @@ import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
@@ -103,7 +104,12 @@ fun ObsidianSurface(
                 outlinePath?.let { path ->
                     drawPath(path, brush = fill)
                     if (highlight > 0.01f) {
-                        drawRect(brush = sheen, size = Size(width, height * 0.55f))
+                        // Sheen is strictly clipped to the outline so the
+                        // radial catchlight can never bleed past the rounded
+                        // corners as a rectangular band.
+                        clipPath(path) {
+                            drawRect(brush = sheen, size = Size(width, height * 0.55f))
+                        }
                     }
                     drawPath(path, brush = borderBrush, style = Stroke(width = 1.dp.toPx()))
                     if (highlight > 0.01f) {

@@ -10,6 +10,7 @@ import androidx.activity.compose.PredictiveBackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
@@ -104,10 +105,13 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -1020,6 +1024,19 @@ private fun ComposerBar(
     onMic: () -> Unit
 ) {
     var focused by remember { mutableStateOf(false) }
+    val composerShape = RoundedCornerShape(26.dp)
+    // Obsidian glass capsule chrome: crisp 1.2dp hairline that ignites cyan
+    // on focus plus a soft 2dp outer halo, both tweened over 180ms.
+    val borderColor by animateColorAsState(
+        targetValue = if (focused) StarkCyanPrimary.copy(alpha = 0.65f) else SpecularHighlightSubtle,
+        animationSpec = tween(durationMillis = 180),
+        label = "composerBorder"
+    )
+    val haloAlpha by animateFloatAsState(
+        targetValue = if (focused) 0.28f else 0f,
+        animationSpec = tween(durationMillis = 180),
+        label = "composerHalo"
+    )
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -1033,33 +1050,65 @@ private fun ComposerBar(
                 .padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.Bottom
         ) {
-            ObsidianSurface(
+            Box(
                 modifier = Modifier
                     .weight(1f)
-                    .animateContentSize(FridayMotion.SnappySize),
-                shape = RoundedCornerShape(26.dp),
-                isHighlighted = focused
+                    .animateContentSize(FridayMotion.SnappySize)
+                    .drawBehind {
+                        if (haloAlpha > 0.01f) {
+                            val outset = 2.dp.toPx()
+                            drawRoundRect(
+                                color = StarkCyanPrimary.copy(alpha = haloAlpha),
+                                topLeft = Offset(-outset, -outset),
+                                size = Size(size.width + outset * 2f, size.height + outset * 2f),
+                                cornerRadius = CornerRadius(26.dp.toPx() + outset)
+                            )
+                        }
+                    }
             ) {
-                if (value.isBlank()) {
-                    Text(
-                        text = if (isGenerating) "Generating..." else "Message F.R.I.D.A.Y...",
-                        color = TextTertiary,
-                        style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp)
+                Box(
+                    modifier = Modifier
+                        .clip(composerShape)
+                        .background(
+                            brush = Brush.verticalGradient(
+                                colors = listOf(Color(0xFF1A1A23), Color(0xFF131319))
+                            ),
+                            shape = composerShape
+                        )
+                        .drawWithCache {
+                            // Top inner sheen, strictly inside the clipped capsule.
+                            val sheen = Brush.radialGradient(
+                                colors = listOf(Color(0x14FFFFFF), Color.Transparent),
+                                center = Offset(size.width / 2f, 0f),
+                                radius = maxOf(size.width, size.height) * 0.9f
+                            )
+                            onDrawBehind {
+                                drawRect(brush = sheen, size = Size(size.width, size.height * 0.5f))
+                            }
+                        }
+                        .border(width = 1.2.dp, color = borderColor, shape = composerShape)
+                ) {
+                    if (value.isBlank()) {
+                        Text(
+                            text = if (isGenerating) "Generating..." else "Message F.R.I.D.A.Y...",
+                            color = TextTertiary,
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp)
+                        )
+                    }
+                    BasicTextField(
+                        value = value,
+                        onValueChange = onValueChange,
+                        enabled = !isGenerating,
+                        textStyle = TextStyle(color = TextPrimary, fontSize = 14.sp, lineHeight = 20.sp),
+                        cursorBrush = SolidColor(StarkCyanPrimary),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .onFocusChanged { focused = it.isFocused }
+                            .padding(horizontal = 18.dp, vertical = 14.dp),
+                        maxLines = 6
                     )
                 }
-                BasicTextField(
-                    value = value,
-                    onValueChange = onValueChange,
-                    enabled = !isGenerating,
-                    textStyle = TextStyle(color = TextPrimary, fontSize = 14.sp, lineHeight = 20.sp),
-                    cursorBrush = SolidColor(StarkCyanPrimary),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .onFocusChanged { focused = it.isFocused }
-                        .padding(horizontal = 18.dp, vertical = 14.dp),
-                    maxLines = 6
-                )
             }
             Spacer(Modifier.width(8.dp))
             ComposerActionButton(
@@ -1148,7 +1197,7 @@ private fun ComposerActionButton(
         ) { target ->
             Box(
                 modifier = Modifier
-                    .size(44.dp)
+                    .size(46.dp)
                     .clip(RoundedCornerShape(14.dp))
                     .then(
                         when (target) {
