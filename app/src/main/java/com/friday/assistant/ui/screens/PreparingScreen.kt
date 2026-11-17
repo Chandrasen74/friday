@@ -151,7 +151,7 @@ fun PreparingScreen(progress: LiteRtLmService.BundledCopyProgress) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .hudReticle { 1f }
+                    .hudReticle(progress = { 1f })
             )
             Box(modifier = Modifier.size(108.dp)) {
                 Box(

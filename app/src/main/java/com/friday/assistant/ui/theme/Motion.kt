@@ -46,19 +46,23 @@ object FridayMotion {
     const val Short = 250
     const val Medium = 380
     const val Long = 650
-    const val BootTotal = 1400
+    const val BootTotal = 2600
 
-    // Boot choreography stage boundaries (ms)
-    const val BootReticleEnd = 360
-    const val BootEmblemEnd = 460
-    const val BootArcEnd = 760
-    const val BootShockwaveStart = 660
-    const val BootShockwaveEnd = 1060
-    const val BootWordmarkEnd = 920
-    const val BootTelemetryStart = 620
-    const val BootTelemetryEnd = 940
-    const val BootHoldEnd = 1100
-    const val BootDockEnd = 1400
+    // Boot choreography stage boundaries (ms). Cinematic 2.6s reveal:
+    // reticle lock, dual-track arc sweep + shockwave, staggered wordmark,
+    // executive hold, spatial top-bar docking.
+    const val BootReticleEnd = 650
+    const val BootEmblemEnd = 650
+    const val BootArcStart = 250
+    const val BootArcEnd = 1350
+    const val BootShockwaveStart = 1150
+    const val BootShockwaveEnd = 1700
+    const val BootWordmarkStart = 650
+    const val BootWordmarkEnd = 1750
+    const val BootTelemetryStart = 1300
+    const val BootTelemetryEnd = 1750
+    const val BootHoldEnd = 2150
+    const val BootDockEnd = 2600
 
     // Custom easing curves. FridayEase adds operator invoke for inline sampling.
     val Emphasized = FridayEase(0.2f, 0.0f, 0.0f, 1.0f)

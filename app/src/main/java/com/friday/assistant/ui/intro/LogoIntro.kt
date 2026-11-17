@@ -69,16 +69,21 @@ private fun stage(masterT: Float, start: Float, end: Float): Float =
     ((masterT - start) / (end - start)).coerceIn(0f, 1f)
 
 /**
- * Five-stage cold-boot reveal (<=1400ms) driven by a single master timeline:
- * 1. Void + optical reticle lock (0-360ms)
- * 2. Core emblem ignition (60-460ms)
- * 3. Dual-track arc sweep + shockwave (160-1060ms)
- * 4. Staggered wordmark + telemetry lock (320-940ms)
- * 5. Hold (940-1100ms) and spatial top-bar docking (1100-1400ms)
+ * Five-stage cinematic cold-boot reveal (2600ms) driven by a single master
+ * timeline:
+ * 1. Seamless splash handoff + optical reticle lock (0-650ms)
+ * 2. Dual-track arc-reactor sweep + shockwave (250-1700ms)
+ * 3. Staggered wordmark + telemetry lock (650-1750ms)
+ * 4. Executive hold (1750-2150ms)
+ * 5. Spatial top-bar docking (2150-2600ms)
  *
- * The emblem container is pixel-locked at Alignment.Center inside an exact
- * 108dp box (72dp icon) matching the system splash geometry, so the logo
- * never shifts at t=0. Tap anywhere skips by accelerating to completion.
+ * The emblem is pixel-locked at Alignment.Center as an exact 160dp icon
+ * inside the 216dp orbital assembly, matching the Android 12+ splash icon
+ * footprint, so the logo occupies the same screen coordinates and pixel
+ * dimensions as the OS splash at t=0 (zero flash, zero size jump; scale
+ * starts at 1.0 and pulses 1.0 -> ~1.05 -> 1.0). All per-frame values are
+ * provider lambdas read inside graphicsLayer/draw scopes so the hierarchy
+ * never recomposes during the boot. Tap anywhere skips to completion.
  */
 @Composable
 fun LogoIntro(
@@ -98,7 +103,7 @@ fun LogoIntro(
     fun skip() {
         scope.launch {
             try {
-                master.animateTo(1f, tween(durationMillis = 150, easing = FridayMotion.Emphasized))
+                master.animateTo(1f, tween(durationMillis = 220, easing = FridayMotion.Emphasized))
             } catch (_: CancellationException) {
                 // Fast-forward was preempted; treat as done.
             }
@@ -142,50 +147,61 @@ fun LogoIntro(
                 contentDescription = "F.R.I.D.A.Y startup sequence. Tap anywhere to skip."
             }
     ) {
-        val centerDp = 108.dp
-
         // ---- Backdrop group: reticle + wordmark + telemetry (fades at dock) ----
         Box(
             modifier = Modifier
                 .matchParentSize()
                 .graphicsLayer {
                     val t = master.value * FridayMotion.BootTotal
-                    alpha = 1f - FridayMotion.HudLock(stage(t, 1140f, FridayMotion.BootDockEnd.toFloat()))
+                    alpha = 1f - FridayMotion.HudLock(
+                        stage(t, FridayMotion.BootHoldEnd.toFloat(), FridayMotion.BootDockEnd.toFloat())
+                    )
                 }
         ) {
+            // Outer optical reticle: 288dp concentric hairline rings locking
+            // around the 160dp emblem (scale 1.25 -> 1.0, rotate -22 -> 0).
             Box(
                 modifier = Modifier
                     .align(Alignment.Center)
-                    .size(164.dp)
-                    .hudReticle {
-                        FridayMotion.HudLock(stage(master.value * FridayMotion.BootTotal, 0f, 360f))
-                    }
+                    .size(288.dp)
+                    .hudReticle(
+                        progress = {
+                            val t = master.value * FridayMotion.BootTotal
+                            FridayMotion.HudLock(stage(t, 0f, FridayMotion.BootReticleEnd.toFloat()))
+                        },
+                        innerRadiusRatio = 256f / 288f,
+                        hairlineWidth = 0.9.dp,
+                        cardinalTickLength = 10.dp,
+                        minorTickCount = 16,
+                        startScale = 1.25f,
+                        startRotation = -22f
+                    )
             )
 
-            // Wordmark + telemetry anchored below the exact-center emblem box
+            // Wordmark + telemetry anchored below the 288dp reticle, the
+            // emblem itself stays locked at the exact viewport center.
             Box(
                 modifier = Modifier
                     .align(Alignment.Center)
-                    .offset(y = 112.dp)
+                    .offset(y = 184.dp)
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     val letterSpacing by remember {
                         derivedStateOf {
-                            val tt = master.value * FridayMotion.BootTotal
-                            when {
-                                tt < 560f -> 7f
-                                tt < 760f -> 4f
-                                else -> 2.5f
-                            }
+                            val t = master.value * FridayMotion.BootTotal
+                            7f - 4.5f * FridayMotion.Emphasized(
+                                stage(t, FridayMotion.BootWordmarkStart.toFloat(), FridayMotion.BootWordmarkEnd.toFloat())
+                            )
                         }
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         WORDMARK.forEachIndexed { index, char ->
-                            val start = 320f + index * 32f
-                            val end = start + 240f
+                            val start = FridayMotion.BootWordmarkStart + index * 55f
+                            val end = start + 450f
                             val glyphColor by remember(index) {
                                 derivedStateOf {
-                                    val p = FridayMotion.Emphasized(stage(master.value * FridayMotion.BootTotal, start, end))
+                                    val t = master.value * FridayMotion.BootTotal
+                                    val p = FridayMotion.Emphasized(stage(t, start, end))
                                     when {
                                         p < 0.35f -> StarkCyanBright
                                         p < 0.75f -> StarkCyanPrimary
@@ -195,9 +211,10 @@ fun LogoIntro(
                             }
                             Box(
                                 modifier = Modifier.graphicsLayer {
-                                    val p = FridayMotion.Emphasized(stage(master.value * FridayMotion.BootTotal, start, end))
+                                    val t = master.value * FridayMotion.BootTotal
+                                    val p = FridayMotion.Emphasized(stage(t, start, end))
                                     alpha = p
-                                    translationY = (1f - p) * 12.dp.toPx()
+                                    translationY = (1f - p) * 14.dp.toPx()
                                 }
                             ) {
                                 Text(
@@ -205,7 +222,7 @@ fun LogoIntro(
                                     style = TextStyle(
                                         fontFamily = FridayDisplayFont,
                                         fontWeight = FontWeight.Bold,
-                                        fontSize = 26.sp,
+                                        fontSize = 28.sp,
                                         letterSpacing = letterSpacing.sp
                                     ),
                                     color = glyphColor
@@ -222,80 +239,105 @@ fun LogoIntro(
             }
         }
 
-        // ---- Emblem + arc ring (docks into the top bar) ----
+        // ---- Dock group: arc ring + glow + emblem (docks into the top bar) ----
+        // 216dp orbital assembly holding the exact 160dp emblem dead-center.
         Box(
             modifier = Modifier
                 .align(Alignment.Center)
-                .size(centerDp)
+                .size(216.dp)
                 .graphicsLayer {
                     val t = master.value * FridayMotion.BootTotal
-                    val d = FridayMotion.Emphasized(stage(t, 1100f, FridayMotion.BootDockEnd.toFloat()))
+                    val d = FridayMotion.Emphasized(
+                        stage(t, FridayMotion.BootHoldEnd.toFloat(), FridayMotion.BootDockEnd.toFloat())
+                    )
                     val rootW = rootSize.width.toFloat()
                     val rootH = rootSize.height.toFloat()
                     translationX = (dock.x - rootW / 2f) * d
                     translationY = (dock.y - rootH / 2f) * d
-                    val targetScale = 28f / 72f
+                    // 160dp emblem -> 28dp top-bar logo (28/160 = 0.175).
+                    val targetScale = 28f / 160f
                     val s = 1f + (targetScale - 1f) * d
                     scaleX = s
                     scaleY = s
                 }
         ) {
-            // Bioluminescent core glow
+            // Bioluminescent core glow (240dp radial bloom, alpha -> 0.30).
             Box(
                 modifier = Modifier
                     .matchParentSize()
                     .graphicsLayer {
                         val t = master.value * FridayMotion.BootTotal
-                        val p = FridayMotion.Emphasized(stage(t, 60f, 460f))
-                        scaleX = 0.6f + 0.4f * p
-                        scaleY = 0.6f + 0.4f * p
-                        alpha = p
+                        val bloom = FridayMotion.Emphasized(stage(t, 0f, FridayMotion.BootEmblemEnd.toFloat()))
+                        val d = FridayMotion.Emphasized(
+                            stage(t, FridayMotion.BootHoldEnd.toFloat(), FridayMotion.BootDockEnd.toFloat())
+                        )
+                        scaleX = 0.6f + 0.4f * bloom
+                        scaleY = 0.6f + 0.4f * bloom
+                        alpha = 0.30f * bloom * (1f - d)
                     }
                     .drawWithCache {
                         val glow = Brush.radialGradient(
                             colors = listOf(
-                                StarkCyanPrimary.copy(alpha = 0.24f),
+                                StarkCyanPrimary,
                                 Color.Transparent
                             ),
                             center = Offset(size.width / 2f, size.height / 2f),
-                            radius = size.minDimension / 2f
+                            radius = 120.dp.toPx()
                         )
-                        onDrawBehind { drawCircle(brush = glow) }
+                        onDrawBehind { drawCircle(brush = glow, radius = 120.dp.toPx()) }
                     }
             )
+            // Dual-track arc-reactor ring: 216dp outer primary arc (2.5dp
+            // stroke) sweeping 0 -> 360 over the lock window, 192dp dashed
+            // counter-arc (1.2dp, 45% alpha), 4dp leading-edge orb and the
+            // 216 -> 340dp completion shockwave. Fades out while docking.
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .graphicsLayer {
+                        val t = master.value * FridayMotion.BootTotal
+                        val d = FridayMotion.Emphasized(
+                            stage(t, FridayMotion.BootHoldEnd.toFloat(), FridayMotion.BootDockEnd.toFloat())
+                        )
+                        alpha = 1f - d
+                    }
+                    .arcRing(
+                        sweepDegrees = {
+                            val t = master.value * FridayMotion.BootTotal
+                            FridayMotion.Emphasized(stage(t, FridayMotion.BootArcStart.toFloat(), FridayMotion.BootArcEnd.toFloat())) * 360f
+                        },
+                        counterSweepDegrees = {
+                            val t = master.value * FridayMotion.BootTotal
+                            FridayMotion.Emphasized(stage(t, FridayMotion.BootArcStart.toFloat(), FridayMotion.BootArcEnd.toFloat())) * 270f
+                        },
+                        shockwave = {
+                            val t = master.value * FridayMotion.BootTotal
+                            stage(t, FridayMotion.BootShockwaveStart.toFloat(), FridayMotion.BootShockwaveEnd.toFloat())
+                        },
+                        outerStrokeWidth = 2.5.dp,
+                        innerStrokeWidth = 1.2.dp,
+                        innerRadiusRatio = 192f / 216f,
+                        shockExpansion = 0.574f,
+                        tipOrbSize = 4.dp
+                    )
+            )
+            // The emblem: exact 160dp at scale 1.0 from the first frame so it
+            // matches the OS splash pixel-for-pixel, then a subtle LogoPop
+            // power-up pulse (1.0 -> ~1.05 -> 1.0) with no alpha fade-in.
             Image(
                 painter = painterResource(id = R.drawable.friday_logo_blue),
                 contentDescription = null,
                 contentScale = ContentScale.Fit,
                 modifier = Modifier
                     .align(Alignment.Center)
-                    .size(72.dp)
+                    .size(160.dp)
                     .graphicsLayer {
                         val t = master.value * FridayMotion.BootTotal
-                        val p = FridayMotion.LogoPopEase(stage(t, 60f, 460f))
-                        val s = 0.84f + 0.16f * p
+                        val p = FridayMotion.LogoPopEase(stage(t, 0f, FridayMotion.BootEmblemEnd.toFloat()))
+                        val s = 1f + 0.05f * p
                         scaleX = s
                         scaleY = s
-                        alpha = p.coerceIn(0f, 1f)
                     }
-            )
-            Box(
-                modifier = Modifier
-                    .matchParentSize()
-                    .arcRing(
-                        sweepDegrees = {
-                            val t = master.value * FridayMotion.BootTotal
-                            FridayMotion.Emphasized(stage(t, 160f, 760f)) * 360f
-                        },
-                        counterSweepDegrees = {
-                            val t = master.value * FridayMotion.BootTotal
-                            FridayMotion.Emphasized(stage(t, 160f, 760f)) * 270f
-                        },
-                        shockwave = {
-                            val t = master.value * FridayMotion.BootTotal
-                            stage(t, 660f, 1060f)
-                        }
-                    )
             )
         }
     }
@@ -309,11 +351,12 @@ private fun TelemetryStrip(master: Animatable<Float, *>) {
                 .size(5.dp)
                 .graphicsLayer {
                     val t = master.value * FridayMotion.BootTotal
-                    // Two 80ms blinks then solid lock
+                    // Two 90ms blinks between 1300-1570ms, then solid lock.
                     alpha = when {
-                        t < 620f -> 0f
-                        t < 700f -> if (((t - 620f) / 40f).toInt() % 2 == 0) 1f else 0.25f
-                        t < 780f -> if (((t - 700f) / 40f).toInt() % 2 == 0) 1f else 0.25f
+                        t < FridayMotion.BootTelemetryStart -> 0f
+                        t < 1390f -> 1f
+                        t < 1480f -> 0.25f
+                        t < 1570f -> 1f
                         else -> 1f
                     }
                 }
@@ -325,13 +368,15 @@ private fun TelemetryStrip(master: Animatable<Float, *>) {
             style = TextStyle(
                 fontFamily = FontFamily.Monospace,
                 fontWeight = FontWeight.Medium,
-                fontSize = 10.sp,
+                fontSize = 10.5.sp,
                 letterSpacing = 1.5.sp
             ),
             color = TextSecondary,
             modifier = Modifier.drawWithContent {
                 val t = master.value * FridayMotion.BootTotal
-                val wipe = FridayMotion.HudLock(stage(t, 620f, 940f))
+                val wipe = FridayMotion.HudLock(
+                    stage(t, FridayMotion.BootTelemetryStart.toFloat(), FridayMotion.BootTelemetryEnd.toFloat())
+                )
                 clipRect(right = size.width * wipe) {
                     this@drawWithContent.drawContent()
                 }

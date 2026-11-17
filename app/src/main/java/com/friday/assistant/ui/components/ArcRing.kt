@@ -32,14 +32,20 @@ fun Modifier.arcRing(
     rotationDegrees: () -> Float = { 0f },
     shockwave: (() -> Float)? = null,
     outerStrokeWidth: Dp = 2.dp,
-    innerStrokeWidth: Dp = 1.dp
+    innerStrokeWidth: Dp = 1.dp,
+    // Inner ring diameter as a ratio of the outer ring diameter.
+    innerRadiusRatio: Float = 92f / 108f,
+    // Shockwave travel as a ratio of the outer radius (0.574 -> 216dp ring
+    // expands to a 340dp diameter before dissolving).
+    shockExpansion: Float = 0.81f,
+    tipOrbSize: Dp = 3.5.dp
 ): Modifier = this.drawWithCache {
     val width = size.width
     val height = size.height
     val center = Offset(width / 2f, height / 2f)
     val outerStrokePx = outerStrokeWidth.toPx()
     val outerRadius = minOf(width, height) / 2f - outerStrokePx / 2f - 1f
-    val innerRadius = outerRadius * (92f / 108f)
+    val innerRadius = outerRadius * innerRadiusRatio
     val outerBrush = Brush.sweepGradient(
         colors = listOf(StarkCyanDeep, StarkCyanBright, StarkCyanDeep),
         center = center
@@ -78,10 +84,10 @@ fun Modifier.arcRing(
                     )
                     drawCircle(
                         color = StarkCyanBright.copy(alpha = 0.35f),
-                        radius = 3.5.dp.toPx() * 1.8f,
+                        radius = tipOrbSize.toPx() * 1.8f,
                         center = tip
                     )
-                    drawCircle(color = StarkCyanBright, radius = 3.5.dp.toPx(), center = tip)
+                    drawCircle(color = StarkCyanBright, radius = tipOrbSize.toPx(), center = tip)
                 }
                 val counter = counterSweepDegrees().coerceIn(0f, 360f)
                 if (counter > 0.01f) {
@@ -103,11 +109,11 @@ fun Modifier.arcRing(
         }
         val shock = shockwave?.invoke()?.coerceIn(0f, 1f) ?: 0f
         if (shock > 0.01f) {
-            val ringRadius = outerRadius + (outerRadius * 0.81f) * shock
+            val ringRadius = outerRadius + (outerRadius * shockExpansion) * shock
             val ringStroke = outerStrokePx * (1f - shock)
             drawCircle(
                 color = StarkCyanPrimary,
-                alpha = 0.45f * (1f - shock),
+                alpha = 0.48f * (1f - shock),
                 radius = ringRadius,
                 center = center,
                 style = Stroke(width = ringStroke.coerceAtLeast(0.2f), cap = StrokeCap.Round)
