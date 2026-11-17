@@ -165,6 +165,7 @@ import com.friday.assistant.ui.theme.CyanBorderGlow
 import com.friday.assistant.ui.theme.LegacyOnPrimaryDark
 import com.friday.assistant.ui.theme.ObsidianBase
 import com.friday.assistant.ui.components.ObsidianSurface
+import com.friday.assistant.ui.components.TelemetryHudSheet
 import com.friday.assistant.ui.components.plasmaStreamGlow
 import com.friday.assistant.ui.theme.ObsidianSurface as ObsidianSurfaceColor
 import com.friday.assistant.ui.theme.ObsidianSurfaceElevated
@@ -206,6 +207,9 @@ fun FridayApp(viewModel: ChatViewModel) {
     val keyboardController = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
     val context = LocalContext.current
+    // Same durable store the chat surface writes to; cleared alongside the
+    // chat-management actions so wiped history leaves no orphaned metrics.
+    val telemetryCache = remember { GenerationTelemetryCache.getInstance(context) }
 
     val speechLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == android.app.Activity.RESULT_OK) {
@@ -349,7 +353,8 @@ fun FridayApp(viewModel: ChatViewModel) {
                                 onEditMessage = viewModel::startEditMessage,
                                 onMic = { launchSpeechInput() },
                                 onSpeakMessage = viewModel::speakMessage,
-                                onLogoPositioned = { topBarLogoCenter = it }
+                                onLogoPositioned = { topBarLogoCenter = it },
+                                onOpenSettings = { viewModel.toggleSettings(true) }
                             )
                         }
                     }
@@ -381,8 +386,14 @@ fun FridayApp(viewModel: ChatViewModel) {
                     onRefreshModels = viewModel::refreshAvailableModels,
                     onBackPersona = { viewModel.openPersonaMemory(false) },
                     onBackChats = { viewModel.openChatsStorage(false) },
-                    onClearCurrentChat = viewModel::clearCurrentSession,
-                    onClearAllChats = viewModel::clearAllChats,
+                    onClearCurrentChat = {
+                        state.activeSession?.messages?.forEach { telemetryCache.remove(it.id) }
+                        viewModel.clearCurrentSession()
+                    },
+                    onClearAllChats = {
+                        telemetryCache.clearAll()
+                        viewModel.clearAllChats()
+                    },
                     onExportChats = viewModel::exportChatsJson,
                     onImportChats = viewModel::importChatsJson,
                     onRenameSession = viewModel::renameSession,
@@ -628,7 +639,8 @@ private fun ChatScreen(
     onEditMessage: (String) -> Unit,
     onMic: () -> Unit,
     onSpeakMessage: (String) -> Unit,
-    onLogoPositioned: (IntOffset) -> Unit
+    onLogoPositioned: (IntOffset) -> Unit,
+    onOpenSettings: () -> Unit
 ) {
     val session = state.activeSession
     val reducedMotion = rememberReducedMotion()
@@ -640,6 +652,9 @@ private fun ChatScreen(
     // historical assistant bubbles keep their metrics footer after restart.
     val telemetryCache = remember(context) { GenerationTelemetryCache.getInstance(context) }
     val view = LocalView.current
+    // Currently inspected generation for the Telemetry HUD sheet; null when
+    // the modal is closed.
+    var hudMetrics by remember { mutableStateOf<SavedGenerationMetrics?>(null) }
     val isNearBottom by remember {
         derivedStateOf {
             val layout = listState.layoutInfo
@@ -830,12 +845,26 @@ private fun ChatScreen(
                         },
                         onEdit = if (msg.role == ChatRole.USER && !state.isGenerating) { { onEditMessage(msg.id); Toast.makeText(context, "Editing message", Toast.LENGTH_SHORT).show() } } else null,
                         onSpeak = if (msg.role == ChatRole.ASSISTANT && !msg.isError && !msg.isStreaming && msg.content.isNotBlank()) { { onSpeakMessage(msg.id) } } else null,
-                        speaking = state.speakingMessageId == msg.id
+                        speaking = state.speakingMessageId == msg.id,
+                        onOpenHud = {
+                            hudMetrics = it
+                            FridayHaptics.tickLight(view, reducedMotion)
+                        }
                     )
                 }
                 item { Spacer(Modifier.height(12.dp)) }
             }
         }
+    }
+    hudMetrics?.let { metrics ->
+        TelemetryHudSheet(
+            metrics = metrics,
+            onDismiss = { hudMetrics = null },
+            onOpenSettings = {
+                hudMetrics = null
+                onOpenSettings()
+            }
+        )
     }
 }
 
@@ -850,7 +879,8 @@ private fun MessageRow(
     onCopy: () -> Unit,
     onEdit: (() -> Unit)? = null,
     onSpeak: (() -> Unit)? = null,
-    speaking: Boolean = false
+    speaking: Boolean = false,
+    onOpenHud: (SavedGenerationMetrics) -> Unit = {}
 ) {
     val isUser = message.role == ChatRole.USER
     val reducedMotion = rememberReducedMotion()
@@ -1029,7 +1059,12 @@ private fun MessageRow(
             enter = fadeIn(tween(240)) + expandVertically(tween(220)),
             modifier = Modifier.padding(start = 40.dp, top = 5.dp)
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable { footprint?.let(onOpenHud) }
+            ) {
                 Box(
                     modifier = Modifier
                         .size(4.dp)
@@ -1045,6 +1080,13 @@ private fun MessageRow(
                         letterSpacing = 0.8.sp,
                         fontFeatureSettings = "tnum"
                     ),
+                    color = TextTertiary
+                )
+                // Trailing chevron hints the pill opens the diagnostics sheet.
+                Spacer(Modifier.width(5.dp))
+                Text(
+                    text = "›",
+                    style = TextStyle(fontSize = 12.sp),
                     color = TextTertiary
                 )
             }
