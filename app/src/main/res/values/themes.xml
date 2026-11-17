@@ -8,7 +8,6 @@
     <style name="Theme.FRIDAY.Splash" parent="Theme.SplashScreen">
         <item name="windowSplashScreenBackground">@color/obsidian_void</item>
         <item name="windowSplashScreenAnimatedIcon">@drawable/friday_splash_icon</item>
-        <item name="windowSplashScreenIconBackgroundColor">@color/obsidian_void</item>
         <item name="postSplashScreenTheme">@style/Theme.FRIDAY</item>
     </style>
 </resources>
