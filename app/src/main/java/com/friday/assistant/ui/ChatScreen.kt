@@ -120,6 +120,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.res.painterResource
@@ -153,6 +154,7 @@ import com.friday.assistant.ui.screens.SettingsScreen
 import com.friday.assistant.ui.screens.ActionButton
 import com.friday.assistant.ui.telemetry.GenerationTelemetryCache
 import com.friday.assistant.ui.telemetry.SavedGenerationMetrics
+import com.friday.assistant.ui.theme.FridayHaptics
 import com.friday.assistant.ui.theme.FridayMotion
 import com.friday.assistant.ui.theme.ObsidianVoid
 import com.friday.assistant.ui.components.TelemetryHeader
@@ -163,6 +165,7 @@ import com.friday.assistant.ui.theme.CyanBorderGlow
 import com.friday.assistant.ui.theme.LegacyOnPrimaryDark
 import com.friday.assistant.ui.theme.ObsidianBase
 import com.friday.assistant.ui.components.ObsidianSurface
+import com.friday.assistant.ui.components.plasmaStreamGlow
 import com.friday.assistant.ui.theme.ObsidianSurface as ObsidianSurfaceColor
 import com.friday.assistant.ui.theme.ObsidianSurfaceElevated
 import com.friday.assistant.ui.theme.SpecularHighlightSubtle
@@ -636,6 +639,7 @@ private fun ChatScreen(
     // Durable telemetry store: survives process death and cold boots, so
     // historical assistant bubbles keep their metrics footer after restart.
     val telemetryCache = remember(context) { GenerationTelemetryCache.getInstance(context) }
+    val view = LocalView.current
     val isNearBottom by remember {
         derivedStateOf {
             val layout = listState.layoutInfo
@@ -801,6 +805,9 @@ private fun ChatScreen(
                                 )
                                 generationFootprints[msg.id] = saved
                                 telemetryCache.put(msg.id, saved)
+                                // Tactile lock-in the exact frame the footer
+                                // becomes available.
+                                FridayHaptics.tickConfirm(view, reducedMotion)
                             }
                         }
                     }
@@ -902,103 +909,114 @@ private fun MessageRow(
             } else {
                 RoundedCornerShape(topStart = 6.dp, topEnd = 20.dp, bottomStart = 20.dp, bottomEnd = 20.dp)
             }
-            Column(
-                modifier = Modifier
-                    .widthIn(max = 320.dp)
-                    .clip(bubbleShape)
-                    .then(
-                        when {
-                            isUser -> Modifier.background(
-                                brush = Brush.verticalGradient(
-                                    colors = listOf(UserBubbleGradientTop, UserBubbleGradientBottom)
-                                ),
-                                shape = bubbleShape
-                            )
-                            message.isError -> Modifier.background(
-                                color = MaterialTheme.colorScheme.error.copy(alpha = 0.12f),
-                                shape = bubbleShape
-                            )
-                            else -> Modifier.background(
-                                brush = Brush.verticalGradient(
-                                    colors = listOf(ObsidianSurfaceElevated, ObsidianSurfaceColor)
-                                ),
-                                shape = bubbleShape
-                            )
-                        }
-                    )
-                    .border(
-                        width = 1.dp,
-                        color = when {
-                            isUser -> CyanBorderGlow
-                            message.isError -> MaterialTheme.colorScheme.error.copy(alpha = 0.35f)
-                            else -> SpecularHighlightSubtle
-                        },
-                        shape = bubbleShape
-                    )
-                    .combinedClickable(onClick = { if (isUser) onEdit?.invoke() }, onLongClick = onCopy)
-                    .padding(horizontal = 12.dp, vertical = 10.dp)
-            ) {
-                if (!isUser) {
-                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                        Text(
-                            text = "F.R.I.D.A.Y",
-                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, fontFamily = FridayDisplayFont),
-                            color = StarkCyanPrimary,
-                            modifier = Modifier.weight(1f)
-                        )
-                        if (message.content.isNotBlank() && !message.isStreaming) {
-                            Icon(
-                                Icons.Default.ContentCopy,
-                                contentDescription = "Copy",
-                                tint = TextSecondary,
-                                modifier = Modifier.size(14.dp).clickable { onCopy() }
-                            )
-                            if (onSpeak != null) {
-                                Spacer(Modifier.width(8.dp))
-                                SpeakIndicator(
-                                    speaking = speaking,
-                                    reducedMotion = reducedMotion,
-                                    onSpeak = onSpeak
+            val bubbleContent: @Composable () -> Unit = {
+                Column(
+                    modifier = Modifier
+                        .widthIn(max = 320.dp)
+                        .clip(bubbleShape)
+                        .then(
+                            when {
+                                isUser -> Modifier.background(
+                                    brush = Brush.verticalGradient(
+                                        colors = listOf(UserBubbleGradientTop, UserBubbleGradientBottom)
+                                    ),
+                                    shape = bubbleShape
+                                )
+                                message.isError -> Modifier.background(
+                                    color = MaterialTheme.colorScheme.error.copy(alpha = 0.12f),
+                                    shape = bubbleShape
+                                )
+                                else -> Modifier.background(
+                                    brush = Brush.verticalGradient(
+                                        colors = listOf(ObsidianSurfaceElevated, ObsidianSurfaceColor)
+                                    ),
+                                    shape = bubbleShape
                                 )
                             }
-                        }
-                    }
-                    Spacer(Modifier.height(4.dp))
-                } else if (onEdit != null) {
-                    Text(
-                        text = "Tap to edit and resend, long press to copy",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = TextTertiary
-                    )
-                    Spacer(Modifier.height(4.dp))
-                }
-                AnimatedContent(
-                    targetState = showTyping,
-                    transitionSpec = {
-                        fadeIn(tween(FridayMotion.Quick)).togetherWith(fadeOut(tween(FridayMotion.Micro)))
-                    },
-                    label = "assistantTyping"
-                ) { typing ->
-                    if (typing) {
-                        Box(modifier = Modifier.padding(vertical = 6.dp)) {
-                            TypingDots()
-                        }
-                    } else if (!isUser && !message.isError && message.content.isNotBlank() && !message.isStreaming) {
-                        Markdown(
-                            content = message.content,
-                            modifier = Modifier.fillMaxWidth()
                         )
-                    } else {
+                        .border(
+                            width = 1.dp,
+                            color = when {
+                                isUser -> CyanBorderGlow
+                                message.isError -> MaterialTheme.colorScheme.error.copy(alpha = 0.35f)
+                                else -> SpecularHighlightSubtle
+                            },
+                            shape = bubbleShape
+                        )
+                        .combinedClickable(onClick = { if (isUser) onEdit?.invoke() }, onLongClick = onCopy)
+                        .padding(horizontal = 12.dp, vertical = 10.dp)
+                ) {
+                    if (!isUser) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                            Text(
+                                text = "F.R.I.D.A.Y",
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, fontFamily = FridayDisplayFont),
+                                color = StarkCyanPrimary,
+                                modifier = Modifier.weight(1f)
+                            )
+                            if (message.content.isNotBlank() && !message.isStreaming) {
+                                Icon(
+                                    Icons.Default.ContentCopy,
+                                    contentDescription = "Copy",
+                                    tint = TextSecondary,
+                                    modifier = Modifier.size(14.dp).clickable { onCopy() }
+                                )
+                                if (onSpeak != null) {
+                                    Spacer(Modifier.width(8.dp))
+                                    SpeakIndicator(
+                                        speaking = speaking,
+                                        reducedMotion = reducedMotion,
+                                        onSpeak = onSpeak
+                                    )
+                                }
+                            }
+                        }
+                        Spacer(Modifier.height(4.dp))
+                    } else if (onEdit != null) {
                         Text(
-                            text = message.content,
-                            color = if (message.isError) MaterialTheme.colorScheme.error else TextPrimary,
-                            style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp, fontFamily = if (!isUser && (message.content.contains("```") || message.content.contains("\n    "))) FontFamily.Monospace else FontFamily.Default)
+                            text = "Tap to edit and resend, long press to copy",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = TextTertiary
                         )
+                        Spacer(Modifier.height(4.dp))
+                    }
+                    AnimatedContent(
+                        targetState = showTyping,
+                        transitionSpec = {
+                            fadeIn(tween(FridayMotion.Quick)).togetherWith(fadeOut(tween(FridayMotion.Micro)))
+                        },
+                        label = "assistantTyping"
+                    ) { typing ->
+                        if (typing) {
+                            Box(modifier = Modifier.padding(vertical = 6.dp)) {
+                                TypingDots()
+                            }
+                        } else if (!isUser && !message.isError && message.content.isNotBlank() && !message.isStreaming) {
+                            Markdown(
+                                content = message.content,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        } else {
+                            Text(
+                                text = message.content,
+                                color = if (message.isError) MaterialTheme.colorScheme.error else TextPrimary,
+                                style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp, fontFamily = if (!isUser && (message.content.contains("```") || message.content.contains("\n    "))) FontFamily.Monospace else FontFamily.Default)
+                            )
+                        }
+                    }
+                    if (message.isStreaming && message.content.isNotBlank()) {
+                        Spacer(Modifier.height(4.dp))
+                        Text("Streaming...", style = MaterialTheme.typography.labelSmall, color = TextSecondary)
                     }
                 }
-                if (message.isStreaming && message.content.isNotBlank()) {
-                    Spacer(Modifier.height(4.dp))
-                    Text("Streaming...", style = MaterialTheme.typography.labelSmall, color = TextSecondary)
+            }
+            if (isUser) {
+                bubbleContent()
+            } else {
+                Box(
+                    modifier = Modifier.plasmaStreamGlow(message.isStreaming, bubbleShape, reducedMotion)
+                ) {
+                    bubbleContent()
                 }
             }
         }
@@ -1420,6 +1438,7 @@ private fun PromptCard(
         }
     }
     var flashed by remember { mutableStateOf(false) }
+    val view = LocalView.current
     LaunchedEffect(flashed) {
         if (flashed) {
             delay(120)
@@ -1443,7 +1462,12 @@ private fun PromptCard(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp),
             isHighlighted = flashed,
-            onClick = { if (!flashed) flashed = true }
+            onClick = {
+                if (!flashed) {
+                    FridayHaptics.tickLight(view, reducedMotion)
+                    flashed = true
+                }
+            }
         ) {
             Row(
                 modifier = Modifier
