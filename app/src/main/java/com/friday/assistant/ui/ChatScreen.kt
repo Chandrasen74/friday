@@ -10,6 +10,7 @@ import androidx.activity.compose.PredictiveBackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Animatable
@@ -19,6 +20,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
@@ -96,6 +98,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -134,6 +137,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.util.lerp
 import androidx.compose.ui.ExperimentalComposeUiApi
+import java.util.Locale
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.friday.assistant.R
 import com.friday.assistant.data.ApiEndpointConfig
@@ -636,6 +640,14 @@ private fun ChatScreen(
     }
     var prevMessageCount by remember(session?.id) { mutableStateOf(messages.size) }
 
+    // Ephemeral per-message generation telemetry, captured the moment an
+    // assistant message finishes streaming (pure UI state, never persisted;
+    // greetings and restored history never stream while mounted, so they
+    // never get a footer).
+    val generationFootprints = remember(session?.id) {
+        mutableStateMapOf<String, Pair<Double, Long?>>()
+    }
+
     LaunchedEffect(session?.id) {
         if (messages.isNotEmpty()) {
             listState.scrollToItem(messages.size + 1)
@@ -753,6 +765,24 @@ private fun ChatScreen(
                     if (isNewMessage) {
                         SideEffect { seenMessageIds.value = seenMessageIds.value + msg.id }
                     }
+                    // Capture the VM's last-generation metrics on the
+                    // streaming -> done flip of a mounted assistant message.
+                    val prevStreaming = remember(msg.id) { mutableStateOf<Boolean?>(null) }
+                    LaunchedEffect(msg.id, msg.isStreaming) {
+                        val was = prevStreaming.value
+                        prevStreaming.value = msg.isStreaming
+                        if (was == true && !msg.isStreaming) {
+                            val m = state.metrics
+                            if (
+                                msg.role == ChatRole.ASSISTANT &&
+                                !msg.isError &&
+                                msg.content.isNotBlank() &&
+                                (m.tokensPerSec != null || m.totalMs != null)
+                            ) {
+                                generationFootprints[msg.id] = Pair(m.tokensPerSec ?: 0.0, m.totalMs)
+                            }
+                        }
+                    }
                     MessageRow(
                         modifier = Modifier.animateItem(
                             fadeInSpec = null,
@@ -762,6 +792,7 @@ private fun ChatScreen(
                         message = msg,
                         enterAnimation = isNewMessage,
                         showTyping = state.isGenerating && msg.isStreaming && msg.content.isBlank(),
+                        footprint = generationFootprints[msg.id],
                         onCopy = {
                             clipboard.setText(AnnotatedString(msg.content))
                             Toast.makeText(context, "Copied", Toast.LENGTH_SHORT).show()
@@ -784,6 +815,7 @@ private fun MessageRow(
     message: ChatMessage,
     enterAnimation: Boolean = false,
     showTyping: Boolean = false,
+    footprint: Pair<Double, Long?>? = null,
     onCopy: () -> Unit,
     onEdit: (() -> Unit)? = null,
     onSpeak: (() -> Unit)? = null,
@@ -806,7 +838,7 @@ private fun MessageRow(
         }
     }
 
-    Row(
+    Column(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp)
@@ -815,130 +847,164 @@ private fun MessageRow(
                 if (isUser) {
                     translationY = (1f - entrance.value) * 12.dp.toPx()
                 }
-            },
-        horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start
-    ) {
-        if (!isUser) {
-            Box(
-                modifier = Modifier
-                    .padding(top = 4.dp, end = 8.dp)
-                    .size(28.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(ObsidianSurfaceElevated)
-                    .border(1.dp, SpecularHighlightSubtle, RoundedCornerShape(8.dp)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    Icons.Default.SmartToy,
-                    contentDescription = null,
-                    tint = StarkCyanPrimary,
-                    modifier = Modifier.size(16.dp)
-                )
             }
-        }
-
-        val bubbleShape = if (isUser) {
-            RoundedCornerShape(topStart = 20.dp, topEnd = 6.dp, bottomStart = 20.dp, bottomEnd = 20.dp)
-        } else {
-            RoundedCornerShape(topStart = 6.dp, topEnd = 20.dp, bottomStart = 20.dp, bottomEnd = 20.dp)
-        }
-        Column(
-            modifier = Modifier
-                .widthIn(max = 320.dp)
-                .clip(bubbleShape)
-                .then(
-                    when {
-                        isUser -> Modifier.background(
-                            brush = Brush.verticalGradient(
-                                colors = listOf(UserBubbleGradientTop, UserBubbleGradientBottom)
-                            ),
-                            shape = bubbleShape
-                        )
-                        message.isError -> Modifier.background(
-                            color = MaterialTheme.colorScheme.error.copy(alpha = 0.12f),
-                            shape = bubbleShape
-                        )
-                        else -> Modifier.background(
-                            brush = Brush.verticalGradient(
-                                colors = listOf(ObsidianSurfaceElevated, ObsidianSurfaceColor)
-                            ),
-                            shape = bubbleShape
-                        )
-                    }
-                )
-                .border(
-                    width = 1.dp,
-                    color = when {
-                        isUser -> CyanBorderGlow
-                        message.isError -> MaterialTheme.colorScheme.error.copy(alpha = 0.35f)
-                        else -> SpecularHighlightSubtle
-                    },
-                    shape = bubbleShape
-                )
-                .combinedClickable(onClick = { if (isUser) onEdit?.invoke() }, onLongClick = onCopy)
-                .padding(horizontal = 12.dp, vertical = 10.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start,
+            verticalAlignment = Alignment.Top
         ) {
             if (!isUser) {
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                    Text(
-                        text = "F.R.I.D.A.Y",
-                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, fontFamily = FridayDisplayFont),
-                        color = StarkCyanPrimary,
-                        modifier = Modifier.weight(1f)
+                Box(
+                    modifier = Modifier
+                        .padding(top = 4.dp, end = 8.dp)
+                        .size(28.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(ObsidianSurfaceElevated)
+                        .border(1.dp, SpecularHighlightSubtle, RoundedCornerShape(8.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Default.SmartToy,
+                        contentDescription = null,
+                        tint = StarkCyanPrimary,
+                        modifier = Modifier.size(16.dp)
                     )
-                    if (message.content.isNotBlank() && !message.isStreaming) {
-                        Icon(
-                            Icons.Default.ContentCopy,
-                            contentDescription = "Copy",
-                            tint = TextSecondary,
-                            modifier = Modifier.size(14.dp).clickable { onCopy() }
-                        )
-                        if (onSpeak != null) {
-                            Spacer(Modifier.width(8.dp))
-                            SpeakIndicator(
-                                speaking = speaking,
-                                reducedMotion = reducedMotion,
-                                onSpeak = onSpeak
+                }
+            }
+
+            val bubbleShape = if (isUser) {
+                RoundedCornerShape(topStart = 20.dp, topEnd = 6.dp, bottomStart = 20.dp, bottomEnd = 20.dp)
+            } else {
+                RoundedCornerShape(topStart = 6.dp, topEnd = 20.dp, bottomStart = 20.dp, bottomEnd = 20.dp)
+            }
+            Column(
+                modifier = Modifier
+                    .widthIn(max = 320.dp)
+                    .clip(bubbleShape)
+                    .then(
+                        when {
+                            isUser -> Modifier.background(
+                                brush = Brush.verticalGradient(
+                                    colors = listOf(UserBubbleGradientTop, UserBubbleGradientBottom)
+                                ),
+                                shape = bubbleShape
+                            )
+                            message.isError -> Modifier.background(
+                                color = MaterialTheme.colorScheme.error.copy(alpha = 0.12f),
+                                shape = bubbleShape
+                            )
+                            else -> Modifier.background(
+                                brush = Brush.verticalGradient(
+                                    colors = listOf(ObsidianSurfaceElevated, ObsidianSurfaceColor)
+                                ),
+                                shape = bubbleShape
                             )
                         }
+                    )
+                    .border(
+                        width = 1.dp,
+                        color = when {
+                            isUser -> CyanBorderGlow
+                            message.isError -> MaterialTheme.colorScheme.error.copy(alpha = 0.35f)
+                            else -> SpecularHighlightSubtle
+                        },
+                        shape = bubbleShape
+                    )
+                    .combinedClickable(onClick = { if (isUser) onEdit?.invoke() }, onLongClick = onCopy)
+                    .padding(horizontal = 12.dp, vertical = 10.dp)
+            ) {
+                if (!isUser) {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                        Text(
+                            text = "F.R.I.D.A.Y",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, fontFamily = FridayDisplayFont),
+                            color = StarkCyanPrimary,
+                            modifier = Modifier.weight(1f)
+                        )
+                        if (message.content.isNotBlank() && !message.isStreaming) {
+                            Icon(
+                                Icons.Default.ContentCopy,
+                                contentDescription = "Copy",
+                                tint = TextSecondary,
+                                modifier = Modifier.size(14.dp).clickable { onCopy() }
+                            )
+                            if (onSpeak != null) {
+                                Spacer(Modifier.width(8.dp))
+                                SpeakIndicator(
+                                    speaking = speaking,
+                                    reducedMotion = reducedMotion,
+                                    onSpeak = onSpeak
+                                )
+                            }
+                        }
+                    }
+                    Spacer(Modifier.height(4.dp))
+                } else if (onEdit != null) {
+                    Text(
+                        text = "Tap to edit and resend, long press to copy",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextTertiary
+                    )
+                    Spacer(Modifier.height(4.dp))
+                }
+                AnimatedContent(
+                    targetState = showTyping,
+                    transitionSpec = {
+                        fadeIn(tween(FridayMotion.Quick)).togetherWith(fadeOut(tween(FridayMotion.Micro)))
+                    },
+                    label = "assistantTyping"
+                ) { typing ->
+                    if (typing) {
+                        Box(modifier = Modifier.padding(vertical = 6.dp)) {
+                            TypingDots()
+                        }
+                    } else if (!isUser && !message.isError && message.content.isNotBlank() && !message.isStreaming) {
+                        Markdown(
+                            content = message.content,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    } else {
+                        Text(
+                            text = message.content,
+                            color = if (message.isError) MaterialTheme.colorScheme.error else TextPrimary,
+                            style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp, fontFamily = if (!isUser && (message.content.contains("```") || message.content.contains("\n    "))) FontFamily.Monospace else FontFamily.Default)
+                        )
                     }
                 }
-                Spacer(Modifier.height(4.dp))
-            } else if (onEdit != null) {
+                if (message.isStreaming && message.content.isNotBlank()) {
+                    Spacer(Modifier.height(4.dp))
+                    Text("Streaming...", style = MaterialTheme.typography.labelSmall, color = TextSecondary)
+                }
+            }
+        }
+        // Post-generation micro-telemetry: only after the assistant stream
+        // completes, never mid-stream, with a gentle fade + expand entrance.
+        val showMetrics = !isUser && !message.isStreaming && !message.isError &&
+            message.content.isNotBlank() && footprint != null
+        AnimatedVisibility(
+            visible = showMetrics,
+            enter = fadeIn(tween(240)) + expandVertically(tween(220)),
+            modifier = Modifier.padding(start = 40.dp, top = 5.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(4.dp)
+                        .clip(CircleShape)
+                        .background(StarkCyanPrimary.copy(alpha = 0.7f))
+                )
+                Spacer(Modifier.width(6.dp))
                 Text(
-                    text = "Tap to edit and resend, long press to copy",
-                    style = MaterialTheme.typography.labelSmall,
+                    text = formatFootprint(footprint),
+                    style = TextStyle(
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 10.5.sp,
+                        letterSpacing = 0.8.sp,
+                        fontFeatureSettings = "tnum"
+                    ),
                     color = TextTertiary
                 )
-                Spacer(Modifier.height(4.dp))
-            }
-            AnimatedContent(
-                targetState = showTyping,
-                transitionSpec = {
-                    fadeIn(tween(FridayMotion.Quick)).togetherWith(fadeOut(tween(FridayMotion.Micro)))
-                },
-                label = "assistantTyping"
-            ) { typing ->
-                if (typing) {
-                    Box(modifier = Modifier.padding(vertical = 6.dp)) {
-                        TypingDots()
-                    }
-                } else if (!isUser && !message.isError && message.content.isNotBlank() && !message.isStreaming) {
-                    Markdown(
-                        content = message.content,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                } else {
-                    Text(
-                        text = message.content,
-                        color = if (message.isError) MaterialTheme.colorScheme.error else TextPrimary,
-                        style = TextStyle(fontSize = 14.sp, lineHeight = 20.sp, fontFamily = if (!isUser && (message.content.contains("```") || message.content.contains("\n    "))) FontFamily.Monospace else FontFamily.Default)
-                    )
-                }
-            }
-            if (message.isStreaming && message.content.isNotBlank()) {
-                Spacer(Modifier.height(4.dp))
-                Text("Streaming...", style = MaterialTheme.typography.labelSmall, color = TextSecondary)
             }
         }
     }
@@ -998,6 +1064,17 @@ private fun SpeakIndicator(
             }
         }
     }
+}
+
+/** Formats the captured post-generation telemetry: tok/s and total time. */
+private fun formatFootprint(footprint: Pair<Double, Long?>?): String {
+    if (footprint == null) return ""
+    val (tokensPerSec, totalMs) = footprint
+    val speed = if (tokensPerSec > 0) String.format(Locale.US, "%.1f tok/s", tokensPerSec) else null
+    val duration = totalMs?.takeIf { it > 0 }?.let { ms ->
+        if (ms < 1000) "${ms}ms" else String.format(Locale.US, "%.2fs", ms / 1000.0)
+    }
+    return listOfNotNull(speed, duration).joinToString("  •  ")
 }
 
 private fun formatDiagnostics(d: DiagnosticsInfo): String = buildString {
