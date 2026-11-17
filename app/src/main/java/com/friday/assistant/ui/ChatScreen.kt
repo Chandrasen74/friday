@@ -130,15 +130,12 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.util.lerp
 import androidx.compose.ui.ExperimentalComposeUiApi
-import java.util.Locale
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.friday.assistant.R
 import com.friday.assistant.data.ApiEndpointConfig
 import com.friday.assistant.data.ChatMessage
 import com.friday.assistant.data.ChatRole
 import com.friday.assistant.data.ChatSession
-import com.friday.assistant.data.GenerationMetrics
-import com.friday.assistant.data.InferenceMode
 import com.friday.assistant.data.MemoryItem
 import com.friday.assistant.data.ModelStatus
 import com.friday.assistant.ui.theme.FridayDisplayFont
@@ -661,30 +658,7 @@ private fun ChatScreen(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TelemetryHeader(
-                status = state.modelStatus,
-                isGenerating = state.isGenerating,
-                subtitle = buildString {
-                    if (session != null && session.title.isNotBlank()) {
-                        append(session.title)
-                        append("  •  ")
-                    }
-                    append(
-                        when {
-                            state.inferenceMode == InferenceMode.REMOTE_API && state.apiConfig.isConfigured -> "Remote API"
-                            state.inferenceMode == InferenceMode.REMOTE_API -> "Remote API (not configured)"
-                            state.modelStatus.isReady -> "LiteRT-LM local"
-                            else -> "Local fallback"
-                        }
-                    )
-                    val modelLabel = state.metrics.modelName.ifBlank {
-                        state.modelStatus.resolvedPath?.substringAfterLast('/') ?: ""
-                    }.removeSuffix(".litertlm")
-                    if (modelLabel.isNotBlank()) {
-                        append("  •  ")
-                        append(modelLabel)
-                    }
-                },
-                metricsLine = formatMetrics(state.metrics, state.isGenerating),
+                sessionTitle = session?.title?.takeIf { it.isNotBlank() } ?: "New session",
                 onMenu = onMenu,
                 onNew = onNew,
                 onRegenerate = if (session != null) onRegenerate else null,
@@ -1020,18 +994,6 @@ private fun SpeakIndicator(
             }
         }
     }
-}
-
-private fun formatMetrics(m: GenerationMetrics, generating: Boolean): String {
-    if (m.startedAtMs == null && !generating) return "ready"
-    val ttft = m.ttftMs?.let { "${it}ms TTFT" }
-    val total = m.totalMs?.let { "${it}ms total" }
-    val tps = m.tokensPerSec?.let { String.format(Locale.US, "%.1f tok/s", it) }
-    val cps = m.charsPerSec?.let { String.format(Locale.US, "%.1f ch/s", it) }
-    val out = if (m.outputChars > 0) "${m.outputChars} chars (~${m.estimatedTokens} tok)" else null
-    val chunks = if (m.chunkCount > 0) "${m.chunkCount} chunks" else null
-    val parts = listOfNotNull(if (generating) "generating" else null, ttft, total, tps, cps, out, chunks)
-    return if (parts.isEmpty()) "ready" else parts.joinToString(" | ")
 }
 
 private fun formatDiagnostics(d: DiagnosticsInfo): String = buildString {
