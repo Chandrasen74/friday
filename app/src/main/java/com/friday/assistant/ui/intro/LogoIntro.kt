@@ -37,6 +37,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -51,6 +52,7 @@ import com.friday.assistant.R
 import com.friday.assistant.ui.components.arcRing
 import com.friday.assistant.ui.components.hudReticle
 import com.friday.assistant.ui.theme.FridayDisplayFont
+import com.friday.assistant.ui.theme.FridayHaptics
 import com.friday.assistant.ui.theme.FridayMotion
 import com.friday.assistant.ui.theme.ObsidianVoid
 import com.friday.assistant.ui.theme.StarkCyanBright
@@ -94,10 +96,16 @@ fun LogoIntro(
     val master = remember { Animatable(0f) }
     val finished = remember { java.util.concurrent.atomic.AtomicBoolean(false) }
     val scope = rememberCoroutineScope()
+    val view = LocalView.current
     var rootSize by remember { mutableStateOf(IntSize.Zero) }
 
     fun finish() {
-        if (finished.compareAndSet(false, true)) onFinish()
+        if (finished.compareAndSet(false, true)) {
+            // Stage 5 dock completed (or the user skipped to it): one subtle
+            // scalar tick marks the emblem locking into the top bar.
+            FridayHaptics.tickLight(view, reducedMotion)
+            onFinish()
+        }
     }
 
     fun skip() {
