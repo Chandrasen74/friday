@@ -18,7 +18,7 @@ class MainActivity : ComponentActivity() {
     private val chatViewModel: ChatViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        installSplashScreen()
+        installSplashScreen().setOnExitAnimationListener { provider -> provider.remove() }
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {

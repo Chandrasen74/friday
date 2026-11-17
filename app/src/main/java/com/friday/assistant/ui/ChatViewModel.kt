@@ -68,7 +68,8 @@ data class ChatUiState(
     val isMemoryBusy: Boolean = false,
     val speakReplies: Boolean = false,
     val speakingMessageId: String? = null,
-    val diagnostics: DiagnosticsInfo = DiagnosticsInfo()
+    val diagnostics: DiagnosticsInfo = DiagnosticsInfo(),
+    val bundledCopyProgress: LiteRtLmService.BundledCopyProgress? = null
 ) {
     val activeSession: ChatSession?
         get() = sessions.firstOrNull { it.id == activeSessionId } ?: sessions.firstOrNull()
@@ -123,25 +124,74 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         pushDiagnostics()
         tts.onSpeakingChanged = { speaking -> if (!speaking) setSpeakingMessage(null) }
         viewModelScope.launch {
-            val discovered = LiteRtLmService.discoverDefaultModelPath(getApplication<Application>().applicationContext).orEmpty()
+            val appContext = getApplication<Application>().applicationContext
+            var copyComplete = false
+            var discovered = ""
+            var copyErrorMessage: String? = null
+            try {
+                discovered = LiteRtLmService.discoverDefaultModelPath(appContext) { progress ->
+                    if (!copyComplete) {
+                        _uiState.update {
+                            it.copy(
+                                bundledCopyProgress = progress,
+                                modelStatus = ModelStatus(statusText = "Preparing bundled models...")
+                            )
+                        }
+                    }
+                }.orEmpty()
+            } catch (e: Exception) {
+                copyErrorMessage = e.message ?: "Failed to prepare bundled models"
+                Log.e("FRIDAY", "MODEL: bundled copy failed for startup", e)
+            } finally {
+                copyComplete = true
+                _uiState.update { it.copy(bundledCopyProgress = null) }
+            }
+
             val chosen = savedPathPref.ifBlank { discovered }
             _uiState.update { it.copy(modelPathInput = chosen) }
             refreshAvailableModels()
-            if (chosen.isNotBlank()) {
-                _uiState.update { it.copy(modelStatus = localService.currentStatus(configuredPath = chosen, loading = true)) }
-                val t0 = System.currentTimeMillis()
-                val result = localService.loadModel(chosen, savedUseGpu)
-                lastModelLoadMs = System.currentTimeMillis() - t0
-                Log.i("FRIDAY", "MODEL: startup load ${result.fold(onSuccess = { "ok" }, onFailure = { "failed: ${it.message}" })} in $lastModelLoadMs ms (${chosen.substringAfterLast('/')})")
-                _uiState.update { state ->
-                    state.copy(
-                        modelStatus = result.getOrElse { e ->
-                            localService.currentStatus(configuredPath = chosen, error = e.message ?: "Failed to load model")
-                        }
+
+            if (copyErrorMessage != null) {
+                _uiState.update {
+                    it.copy(
+                        modelStatus = ModelStatus(
+                            statusText = "Failed to prepare bundled models",
+                            lastError = copyErrorMessage
+                        )
                     )
                 }
-            } else {
-                _uiState.update { it.copy(modelStatus = ModelStatus(statusText = "No local model loaded")) }
+                pushDiagnostics()
+                return@launch
+            }
+
+            val chosenFile = if (chosen.isNotBlank()) java.io.File(chosen) else null
+            if (chosen.isBlank() || chosenFile == null || !chosenFile.exists() || !chosenFile.isFile || chosenFile.length() <= 0L) {
+                _uiState.update {
+                    it.copy(
+                        modelStatus = ModelStatus(
+                            statusText = "No local model loaded",
+                            lastError = if (chosen.isNotBlank()) "Bundled model is missing or incomplete. Restart the app to retry preparation." else null
+                        )
+                    )
+                }
+                pushDiagnostics()
+                return@launch
+            }
+
+            _uiState.update { it.copy(modelStatus = localService.currentStatus(configuredPath = chosen, loading = true)) }
+            val t0 = System.currentTimeMillis()
+            val result = localService.loadModel(chosen, savedUseGpu)
+            lastModelLoadMs = System.currentTimeMillis() - t0
+            Log.i(
+                "FRIDAY",
+                "MODEL: startup load ${result.fold(onSuccess = { "ok" }, onFailure = { "failed: ${it.message}" })} in $lastModelLoadMs ms (${chosen.substringAfterLast('/')})"
+            )
+            _uiState.update { state ->
+                state.copy(
+                    modelStatus = result.getOrElse { e ->
+                        localService.currentStatus(configuredPath = chosen, error = e.message ?: "Failed to load model")
+                    }
+                )
             }
             pushDiagnostics()
         }
