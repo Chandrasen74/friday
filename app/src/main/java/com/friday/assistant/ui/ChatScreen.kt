@@ -43,6 +43,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -943,6 +944,12 @@ private fun MessageRow(
                 Column(
                     modifier = Modifier
                         .widthIn(max = 320.dp)
+                        // Loading/blank states (typing-dots frame, restored
+                        // empty placeholder, empty model output) must never
+                        // collapse into a flat capsule: hold a stable
+                        // intrinsic minimum height from frame 1 so the
+                        // header and indicator keep their breathing room.
+                        .then(if (!isUser) Modifier.defaultMinSize(minHeight = 56.dp) else Modifier)
                         .clip(bubbleShape)
                         .then(
                             when {
