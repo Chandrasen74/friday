@@ -53,6 +53,9 @@ object FridayMotion {
     // executive hold, spatial top-bar docking.
     const val BootReticleEnd = 650
     const val BootEmblemEnd = 650
+    // Emblem pop-in window: the OS splash now renders with no icon, so the
+    // emblem ignites from nothing over the first 350ms of the boot.
+    const val BootEmblemPopEnd = 350
     const val BootArcStart = 250
     const val BootArcEnd = 1350
     const val BootShockwaveStart = 1150
