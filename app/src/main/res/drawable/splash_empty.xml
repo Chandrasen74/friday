@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Invisible 1x1 splash icon: the OS 12+ splash must render as a solid
+  ObsidianVoid field with no system icon, so the cold launch hands off
+  directly into LogoIntro's emblem pop-in (no duplicate static logo).
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <size android:width="1dp" android:height="1dp" />
+    <solid android:color="@android:color/transparent" />
+</shape>

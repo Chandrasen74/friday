@@ -80,10 +80,11 @@ private fun stage(masterT: Float, start: Float, end: Float): Float =
  * 5. Spatial top-bar docking (2150-2600ms)
  *
  * The emblem is pixel-locked at Alignment.Center as an exact 160dp icon
- * inside the 216dp orbital assembly, matching the Android 12+ splash icon
- * footprint, so the logo occupies the same screen coordinates and pixel
- * dimensions as the OS splash at t=0 (zero flash, zero size jump; scale
- * starts at 1.0 and pulses 1.0 -> ~1.05 -> 1.0). All per-frame values are
+ * inside the 216dp orbital assembly. The OS 12+ splash renders as a solid
+ * ObsidianVoid field with no system icon (transparent 1x1 splash drawable),
+ * so the emblem ignites from nothing over the first 350ms (alpha 0 -> 1,
+ * scale 0.78 -> 1.0 with a one-bounce pop) while the HUD reticle locks
+ * inward. All per-frame values are
  * provider lambdas read inside graphicsLayer/draw scopes so the hierarchy
  * never recomposes during the boot. Tap anywhere skips to completion.
  */
@@ -329,9 +330,11 @@ fun LogoIntro(
                         tipOrbSize = 4.dp
                     )
             )
-            // The emblem: exact 160dp at scale 1.0 from the first frame so it
-            // matches the OS splash pixel-for-pixel, then a subtle LogoPop
-            // power-up pulse (1.0 -> ~1.05 -> 1.0) with no alpha fade-in.
+            // The emblem: the OS splash now renders with NO icon, so there is
+            // no static logo to hand off from. The emblem ignites from
+            // nothing over the first 350ms (alpha 0 -> 1, scale 0.78 -> 1.0
+            // with the one-bounce LogoPopEase overshoot) exactly as the HUD
+            // reticle locks inward around it.
             Image(
                 painter = painterResource(id = R.drawable.friday_logo_blue),
                 contentDescription = null,
@@ -341,8 +344,11 @@ fun LogoIntro(
                     .size(160.dp)
                     .graphicsLayer {
                         val t = master.value * FridayMotion.BootTotal
-                        val p = FridayMotion.LogoPopEase(stage(t, 0f, FridayMotion.BootEmblemEnd.toFloat()))
-                        val s = 1f + 0.05f * p
+                        val p = FridayMotion.LogoPopEase(
+                            stage(t, 0f, FridayMotion.BootEmblemPopEnd.toFloat())
+                        )
+                        alpha = p.coerceIn(0f, 1f)
+                        val s = 0.78f + 0.22f * p
                         scaleX = s
                         scaleY = s
                     }
