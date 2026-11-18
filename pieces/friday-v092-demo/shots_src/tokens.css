@@ -1,0 +1,126 @@
+/* FRIDAY v0.9.2 shot forging: design tokens as CSS variables.
+   Extracted from Compose source; citations in ../assets/design_tokens.json.
+   Scale: Pixel-class 1080x2400 physical px at 420dpi, density 2.625.
+   1dp = 1rem = 2.625px. All sizes below are written in dp as rem. */
+
+@font-face {
+  font-family: "Orbitron";
+  src: url("fonts/orbitron_bold.ttf") format("truetype");
+  font-weight: 400 700;
+  font-style: normal;
+  font-synthesis: none;
+}
+@font-face {
+  font-family: "Roboto";
+  src: url("fonts/roboto-latin-400-normal.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+}
+@font-face {
+  font-family: "Roboto";
+  src: url("fonts/roboto-latin-500-normal.woff2") format("woff2");
+  font-weight: 500;
+  font-style: normal;
+}
+@font-face {
+  font-family: "Roboto";
+  src: url("fonts/roboto-latin-600-normal.woff2") format("woff2");
+  font-weight: 600;
+  font-style: normal;
+}
+@font-face {
+  font-family: "Roboto";
+  src: url("fonts/roboto-latin-700-normal.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+}
+
+:root {
+  /* faces: film bundles exactly two. Orbitron = app display face (bundled ttf).
+     Roboto = Android SansSerif stand-in. The app's Monospace telemetry is set
+     in Roboto with tabular figures (font-variant-numeric: tabular-nums);
+     recorded as a documented substitution in PROVENANCE.md. */
+  --font-display: "Orbitron";
+  --font-ui: "Roboto";
+  --font-mono-ui: "Roboto";
+
+  /* Color.kt:12-44 */
+  --void: #09090C;
+  --base: #0E0E13;
+  --surface: #15151C;
+  --elevated: #1C1C25;
+  --glass: rgba(21, 21, 28, 0.80);
+  --spec-strong: rgba(255, 255, 255, 0.18);
+  --spec-subtle: rgba(255, 255, 255, 0.07);
+  --spec-edge: rgba(255, 255, 255, 0.02);
+  --cyan-glow: rgba(125, 211, 252, 0.30);
+  --hairline: #2A2F36;
+  --cyan: #7DD3FC;
+  --cyan-bright: #BAE6FD;
+  --cyan-deep: #0284C7;
+  --cyan-muted: rgba(125, 211, 252, 0.12);
+  --emerald: #34D399;
+  --amber: #FBBF24;
+  --crimson: #F87171;
+  --text-primary: #F4F4F6;
+  --text-secondary: #A1A1AA;
+  --text-tertiary: #63636E;
+  --on-primary: #0B1720;
+  --user-bubble-top: #162836;
+  --user-bubble-bottom: #111C26;
+  --composer-top: #1A1A23;
+  --composer-bottom: #131319;
+  --scheme-secondary: #93C5FD;
+  --scheme-on-primary-container: #E6F6FF;
+
+  /* Type.kt:22-99 (1rem = 1sp here) */
+  --t-display-l: 700 28rem/34rem var(--font-display);
+  --t-headline-m: 700 24rem/30rem var(--font-display);
+  --t-headline-s: 700 20rem/26rem var(--font-display);
+  --t-title-m: 700 15rem/20rem var(--font-display);
+  --t-title-s: 600 14rem/20rem var(--font-ui);
+  --t-body-l: 400 15.5rem/23rem var(--font-ui);
+  --t-body-m: 400 14rem/20rem var(--font-ui);
+  --t-body-s: 400 12.5rem/17rem var(--font-ui);
+  --t-label-l: 600 14rem/18rem var(--font-ui);
+  --t-label-m: 500 12rem/16rem var(--font-ui);
+  --t-label-s: 500 10.5rem/14rem var(--font-mono-ui);
+
+  /* insets */
+  --status-h: 24rem;
+  --nav-h: 24rem;
+  --header-h: 68rem;      /* row pad 6 + 56 */
+  --composer-body: 68rem; /* row pad 10x2 + capsule 48 */
+}
+
+html { font-size: 2.625px; }
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  width: 1080px;
+  height: 2400px;
+  background: var(--void);
+  font-family: var(--font-ui);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+.screen {
+  position: relative;
+  width: 1080px;
+  height: 2400px;
+  background: var(--base);
+  overflow: hidden;
+}
+
+.layer { position: absolute; left: 0; width: 1080px; }
+
+/* [data-placeholder] marks any value not derivable from source; see
+   assets/shots/PLACEHOLDERS.md. Never remove the attribute from a capture. */
+[data-placeholder]::after { content: ""; }
+
+.mono-tnum {
+  font-family: var(--font-mono-ui);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
