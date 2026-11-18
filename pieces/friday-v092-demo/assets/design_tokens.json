@@ -1,0 +1,360 @@
+{
+  "_meta": {
+    "piece": "friday-v092-demo",
+    "purpose": "Design tokens extracted from F.R.I.D.A.Y Compose source for the shot-forging rebuild (Step 1 of SHOT FORGING).",
+    "authority": "Compose source only. File:line references are relative to repo root C:\\...\\01-Projects\\friday.",
+    "prefix": "app/src/main/java/com/friday/assistant/",
+    "unit_note": "All dp values are Compose density-independent pixels. The film renders at 1080x2400 CSS px for a 420dpi-class phone, so 1dp = 2.625px at 420dpi; but for exactness the shots use the app's 3x bucket mapping chosen per-screen and documented in shots_src.",
+    "font_note": "The app bundles ONE font file: app/src/main/res/font/orbitron_bold.ttf (used at Bold/SemiBold/Normal weights, Type.kt:11-15). UI text uses FontFamily.SansSerif and telemetry uses FontFamily.Monospace, both platform defaults with no bundled file. See fonts.json decisions in shots_src.",
+    "light_scheme_note": "The app defines only a darkColorScheme (Theme.kt:8-25); no light scheme exists anywhere in the source. Per instructions, use dark."
+  },
+
+  "colors": {
+    "core_tokens": {
+      "source": "app/src/main/java/com/friday/assistant/ui/theme/Color.kt",
+      "values": {
+        "ObsidianVoid":              { "argb": "0xFF09090C", "css": "#09090C", "alpha": 1.0,  "ref": "ui/theme/Color.kt:12", "role": "deepest ground (boot, HUD underlay)" },
+        "ObsidianBase":              { "argb": "0xFF0E0E13", "css": "#0E0E13", "alpha": 1.0,  "ref": "ui/theme/Color.kt:13", "role": "app background / Scaffold / HUD sheet container" },
+        "ObsidianSurface":           { "argb": "0xFF15151C", "css": "#15151C", "alpha": 1.0,  "ref": "ui/theme/Color.kt:14", "role": "cards, bubbles lower gradient stop, drawer" },
+        "ObsidianSurfaceElevated":   { "argb": "0xFF1C1C25", "css": "#1C1C25", "alpha": 1.0,  "ref": "ui/theme/Color.kt:15", "role": "elevated cards, bubbles upper gradient stop, pills" },
+        "ObsidianSurfaceGlass":      { "argb": "0xCC15151C", "css": "rgba(21,21,28,0.80)", "alpha": 0.8, "ref": "ui/theme/Color.kt:16", "role": "header/settings top bars glass" },
+        "SpecularHighlightStrong":   { "argb": "0x2EFFFFFF", "css": "rgba(255,255,255,0.18)", "alpha": 0.18, "ref": "ui/theme/Color.kt:19", "role": "strong specular hairline (top bars, HUD seam)" },
+        "SpecularHighlightSubtle":   { "argb": "0x12FFFFFF", "css": "rgba(255,255,255,0.07)", "alpha": 0.07, "ref": "ui/theme/Color.kt:20", "role": "default card/bubble borders, composer idle border" },
+        "SpecularShadowEdge":        { "argb": "0x05FFFFFF", "css": "rgba(255,255,255,0.02)", "alpha": 0.02, "ref": "ui/theme/Color.kt:21", "role": "faint edge" },
+        "CyanBorderGlow":            { "argb": "0x4D7DD3FC", "css": "rgba(125,211,252,0.30)", "alpha": 0.30, "ref": "ui/theme/Color.kt:22", "role": "cyan borders (user bubble, selected chips, focused fields)" },
+        "HairlineNeutral":           { "argb": "0xFF2A2F36", "css": "#2A2F36", "alpha": 1.0,  "ref": "ui/theme/Color.kt:23", "role": "dividers, outline tokens" },
+        "StarkCyanPrimary":          { "argb": "0xFF7DD3FC", "css": "#7DD3FC", "alpha": 1.0,  "ref": "ui/theme/Color.kt:26", "role": "primary accent (film accent family; film rule pins #38BDF8 family)" },
+        "StarkCyanBright":           { "argb": "0xFFBAE6FD", "css": "#BAE6FD", "alpha": 1.0,  "ref": "ui/theme/Color.kt:27", "role": "bright accent (arc ring tips)" },
+        "StarkCyanDeep":             { "argb": "0xFF0284C7", "css": "#0284C7", "alpha": 1.0,  "ref": "ui/theme/Color.kt:28", "role": "gradient bottom of primary pills/send button" },
+        "StarkCyanMuted":            { "argb": "0x1F7DD3FC", "css": "rgba(125,211,252,0.12)", "alpha": 0.12, "ref": "ui/theme/Color.kt:29", "role": "selected session row wash" },
+        "TelemetryEmerald":          { "argb": "0xFF34D399", "css": "#34D399", "alpha": 1.0,  "ref": "ui/theme/Color.kt:32", "role": "healthy backend dot, boot telemetry dot" },
+        "TelemetryAmber":            { "argb": "0xFFFBBF24", "css": "#FBBF24", "alpha": 1.0,  "ref": "ui/theme/Color.kt:33", "role": "loading dot, CPU tip border/label" },
+        "TelemetryCrimson":          { "argb": "0xFFF87171", "css": "#F87171", "alpha": 1.0,  "ref": "ui/theme/Color.kt:34", "role": "errors, stop pill" },
+        "TextPrimary":               { "argb": "0xFFF4F4F6", "css": "#F4F4F6", "alpha": 1.0,  "ref": "ui/theme/Color.kt:37", "role": "primary text" },
+        "TextSecondary":             { "argb": "0xFFA1A1AA", "css": "#A1A1AA", "alpha": 1.0,  "ref": "ui/theme/Color.kt:38", "role": "secondary text" },
+        "TextTertiary":              { "argb": "0xFF63636E", "css": "#63636E", "alpha": 1.0,  "ref": "ui/theme/Color.kt:39", "role": "tertiary text, mono micro labels, footer" },
+        "LegacyOnPrimaryDark":       { "argb": "0xFF0B1720", "css": "#0B1720", "alpha": 1.0,  "ref": "ui/theme/Color.kt:42", "role": "icon/text on cyan pills" },
+        "UserBubbleGradientTop":     { "argb": "0xFF162836", "css": "#162836", "alpha": 1.0,  "ref": "ui/theme/Color.kt:43", "role": "user bubble gradient top" },
+        "UserBubbleGradientBottom":  { "argb": "0xFF111C26", "css": "#111C26", "alpha": 1.0,  "ref": "ui/theme/Color.kt:44", "role": "user bubble gradient bottom" }
+      }
+    },
+    "inline_colors": {
+      "composer_capsule_gradient":  { "top": "#1A1A23", "bottom": "#131319", "ref": "ui/ChatScreen.kt:1255-1257" },
+      "composer_sheen":             { "color": "rgba(255,255,255,0.08)", "stop": "radial from top center", "ref": "ui/ChatScreen.kt:1262-1269" },
+      "header_bottom_hairline":     { "gradient": ["rgba(255,255,255,0.07)", "rgba(255,255,255,0.03)"], "ref": "ui/components/TelemetryHeader.kt:72-84" },
+      "onPrimaryContainer_dark":    { "css": "#E6F6FF", "ref": "ui/theme/Theme.kt:12" },
+      "secondary_dark":             { "css": "#93C5FD", "ref": "ui/theme/Theme.kt:13" },
+      "onError_dark":               { "css": "#1A1A1A", "ref": "ui/theme/Theme.kt:24" }
+    },
+    "material3_dark_scheme": {
+      "source": "ui/theme/Theme.kt:8-25",
+      "primary": "StarkCyanPrimary",
+      "onPrimary": "LegacyOnPrimaryDark",
+      "primaryContainer": "UserBubbleGradientTop",
+      "onPrimaryContainer": "#E6F6FF",
+      "secondary": "#93C5FD",
+      "onSecondary": "LegacyOnPrimaryDark",
+      "background": "ObsidianBase",
+      "onBackground": "TextPrimary",
+      "surface": "ObsidianSurface",
+      "onSurface": "TextPrimary",
+      "surfaceVariant": "ObsidianSurfaceElevated",
+      "onSurfaceVariant": "TextSecondary",
+      "outline": "HairlineNeutral",
+      "outlineVariant": "HairlineNeutral",
+      "error": "TelemetryCrimson",
+      "onError": "#1A1A1A"
+    }
+  },
+
+  "typography": {
+    "families": {
+      "FridayDisplayFont": {
+        "files": ["app/src/main/res/font/orbitron_bold.ttf"],
+        "weights_mapped": { "Bold": "orbitron_bold", "SemiBold": "orbitron_bold", "Normal": "orbitron_bold" },
+        "ref": "ui/theme/Type.kt:11-15"
+      },
+      "SansSerif": { "platform": "Android system default sans (no bundled file)", "ref": "ui/theme/Type.kt:52,59,66,72,78,85" },
+      "Monospace": { "platform": "Android system default mono (no bundled file)", "ref": "ui/theme/Type.kt:92; ui/ChatScreen.kt:1096; ui/screens/SettingsScreen.kt:517,756" },
+      "Default":   { "platform": "Android system default (Roboto on most devices)", "ref": "ui/components/TelemetryHudSheet.kt:232" }
+    },
+    "styles": {
+      "source": "ui/theme/Type.kt:22-99",
+      "displayLarge":  { "family": "display", "weight": 700, "size_sp": 28,   "line_sp": 34, "ls_sp": 3 },
+      "headlineMedium":{ "family": "display", "weight": 700, "size_sp": 24,   "line_sp": 30, "ls_sp": 2 },
+      "headlineSmall": { "family": "display", "weight": 700, "size_sp": 20,   "line_sp": 26, "ls_sp": 1.5 },
+      "titleMedium":   { "family": "display", "weight": 700, "size_sp": 15,   "line_sp": 20, "ls_sp": 2 },
+      "titleSmall":    { "family": "sans",    "weight": 600, "size_sp": 14,   "line_sp": 20, "ls_sp": 0.2 },
+      "bodyLarge":     { "family": "sans",    "weight": 400, "size_sp": 15.5, "line_sp": 23, "ls_sp": 0.15 },
+      "bodyMedium":    { "family": "sans",    "weight": 400, "size_sp": 14,   "line_sp": 20 },
+      "bodySmall":     { "family": "sans",    "weight": 400, "size_sp": 12.5, "line_sp": 17 },
+      "labelLarge":    { "family": "sans",    "weight": 600, "size_sp": 14,   "line_sp": 18, "ls_sp": 0.3 },
+      "labelMedium":   { "family": "sans",    "weight": 500, "size_sp": 12,   "line_sp": 16, "ls_sp": 0.3 },
+      "labelSmall":    { "family": "mono",    "weight": 500, "size_sp": 10.5, "line_sp": 14, "ls_sp": 1.4, "features": "tnum" }
+    },
+    "ad_hoc_styles": {
+      "header_brand":   { "family": "display", "weight": 700, "size_sp": 15, "ls_sp": 2, "color": "TextPrimary", "ref": "ui/components/TelemetryHeader.kt:114-126" },
+      "header_session": { "family": "sans",    "size_sp": 12, "color": "TextSecondary", "ref": "ui/components/TelemetryHeader.kt:127-134" },
+      "bubble_brand":   { "family": "display", "weight": 700, "base": "labelSmall", "color": "StarkCyanPrimary", "ref": "ui/ChatScreen.kt:989-994" },
+      "footer_metrics": { "family": "mono",    "size_sp": 10.5, "ls_sp": 0.8, "features": "tnum", "color": "TextTertiary", "ref": "ui/ChatScreen.kt:1093-1101" },
+      "hud_model_name": { "family": "mono",    "size_sp": 12, "color": "TextSecondary", "ref": "ui/components/TelemetryHudSheet.kt:167-177" },
+      "hud_quant_tag":  { "family": "mono",    "size_sp": 10, "ls_sp": 0.8, "color": "StarkCyanPrimary", "ref": "ui/components/TelemetryHudSheet.kt:186-194" },
+      "settings_section":{ "family": "mono",   "weight": 600, "size_sp": 11, "ls_sp": 1.6, "color": "TextTertiary", "ref": "ui/screens/SettingsScreen.kt:580-592" },
+      "settings_field": { "family": "mono-if-flag", "size_sp": 13, "color": "TextPrimary", "ref": "ui/screens/SettingsScreen.kt:747-757" },
+      "composer_text":  { "family": "sans",    "size_sp": 14, "line_sp": 20, "color": "TextPrimary", "ref": "ui/ChatScreen.kt:1281-1292" },
+      "settings_topbar_title": { "family": "display", "base": "titleMedium", "ls_sp": 1.5, "color": "TextPrimary", "ref": "ui/screens/SettingsScreen.kt:560-567" }
+    }
+  },
+
+  "shapes": {
+    "ObsidianSurface_default": { "radius_dp": 18, "ref": "ui/components/ObsidianSurface.kt:43,147" },
+    "prompt_card":             { "radius_dp": 16, "ref": "ui/ChatScreen.kt:1523" },
+    "composer_capsule":        { "radius_dp": 26, "border_dp": 1.2, "ref": "ui/ChatScreen.kt:1209,1271" },
+    "composer_action_pill":    { "radius_dp": 14, "ref": "ui/ChatScreen.kt:1383" },
+    "bubble_user":             { "radius_dp": [20, 6, 20, 20], "note": "topStart,topEnd,bottomStart,bottomEnd", "ref": "ui/ChatScreen.kt:940" },
+    "bubble_assistant":        { "radius_dp": [6, 20, 20, 20], "ref": "ui/ChatScreen.kt:942" },
+    "bubble_border_dp":        1,
+    "message_avatar":          { "radius_dp": 8, "size_dp": 28, "ref": "ui/ChatScreen.kt:921-927" },
+    "metrics_footer_pill":     { "radius_dp": 8, "dot_dp": 4, "ref": "ui/ChatScreen.kt:1083-1090" },
+    "hud_sheet":               { "top_radius_dp": 24, "container": "ObsidianBase", "tonal_elevation_dp": 0, "ref": "ui/components/TelemetryHudSheet.kt:59-64" },
+    "hud_handle":              { "w_dp": 36, "h_dp": 4, "radius_dp": 2, "color": "StarkCyanPrimary @ 0.85", "ref": "ui/components/TelemetryHudSheet.kt:73-79" },
+    "hud_stat_card":           { "radius_dp": 14, "ref": "ui/components/TelemetryHudSheet.kt:150,259-262" },
+    "hud_quant_chip":          { "radius_dp": 6, "padding_dp": [8, 3], "ref": "ui/components/TelemetryHudSheet.kt:179-184" },
+    "hud_tip_card":            { "radius_dp": 14, "border": "TelemetryAmber @ 0.35", "padding_dp": 14, "ref": "ui/components/TelemetryHudSheet.kt:204-207" },
+    "action_button":           { "radius_dp": 12, "padding_dp": [14, 10], "ref": "ui/screens/SettingsScreen.kt:782-814" },
+    "settings_text_field":     { "radius_dp": 12, "padding_dp": 12, "ref": "ui/screens/SettingsScreen.kt:730-736" },
+    "mode_chip":               { "radius_dp": 999, "padding_dp": [14, 10], "ref": "ui/screens/SettingsScreen.kt:674-695" },
+    "model_status_pill":       { "radius_dp": 999, "padding_dp": [12, 6], "dot_dp": 6, "ref": "ui/screens/SettingsScreen.kt:648-659" },
+    "model_row":               { "radius_dp": 10, "padding_dp": 10, "ref": "ui/screens/SettingsScreen.kt:378-389" },
+    "diagnostics_card":        { "radius_dp": 10, "padding_dp": 12, "ref": "ui/screens/SettingsScreen.kt:506-512" },
+    "drawer_session_row":      { "radius_dp": 10, "padding_dp": [10, 10], "ref": "ui/ChatScreen.kt:562-569" },
+    "drawer_selected_bar":     { "w_dp": 3, "h_dp": 28, "radius_dp": 2, "ref": "ui/ChatScreen.kt:572-578" },
+    "session_row_radius_note": "shotlist said 10dp; confirmed 10dp here"
+  },
+
+  "spacing_and_layout": {
+    "chat_screen": {
+      "scaffold": { "topBar": "TelemetryHeader", "bottomBar": "ComposerBar (only when a session exists)", "ref": "ui/ChatScreen.kt:700-724" },
+      "empty_state_column": { "padding_dp": [24, 24], "spacers_dp": [20, 20, 6, 28, 10, 8], "align": "CenterHorizontally", "ref": "ui/ChatScreen.kt:732-778" },
+      "empty_logo_box": { "size_dp": 96, "logo_dp": 64, "aura": "BreathingAura scale 1.0-1.03 alpha 0.12-0.24 3400ms", "ref": "ui/ChatScreen.kt:742-750, 1427-1449" },
+      "thread": { "spacing_dp": 8, "top_spacer_dp": 8, "row_padding_h_dp": 12, "ref": "ui/ChatScreen.kt:781-790, 904-914" },
+      "bubble_padding_dp": [12, 10], "bubble_max_width_dp": 320, "assistant_min_height_dp": 56,
+      "bubble_meta_gap_dp": 4, "ref": "ui/ChatScreen.kt:944-1019",
+      "footer_metrics_row": { "start_dp": 40, "top_dp": 5, "dot_dp": 4, "gap_dp": 6, "chevron_gap_dp": 5, "ref": "ui/ChatScreen.kt:1075-1110" },
+      "composer_row": { "padding_dp": [12, 10], "field_to_button_gap_dp": 8, "field_padding_dp": [18, 14], "ref": "ui/ChatScreen.kt:1229-1295" },
+      "prompt_card_row": { "padding_dp": [16, 14], "icon_dp": 14, "gap_dp": 10, "ref": "ui/ChatScreen.kt:1532-1549" }
+    },
+    "header": {
+      "status_bars_padding": true, "row_height_dp": 56, "padding_dp": [4, 6],
+      "logo_dp": 28, "logo_to_text_gap_dp": 10, "ref": "ui/components/TelemetryHeader.kt:65-148"
+    },
+    "drawer": {
+      "width_max_dp": 320, "padding_dp": [12, 16],
+      "spacers_dp": [8, 12, 8], "session_row_gap_v_dp": 2,
+      "ref": "ui/ChatScreen.kt:481-552"
+    },
+    "settings": {
+      "topbar_padding_dp": [8, 8], "section_rows_padding_dp": [16, 14],
+      "chevron_row_padding_dp": [16, 14],
+      "ref": "ui/screens/SettingsScreen.kt:546-550, 617-635"
+    },
+    "hud_sheet": {
+      "padding_h_dp": 20, "bottom_dp": 30, "handle_top_bottom_dp": [14, 16],
+      "stat_rows_gap_dp": 10, "between_grid_and_model_dp": 10, "between_model_and_tip_dp": 10,
+      "ref": "ui/components/TelemetryHudSheet.kt:66-88, 104, 120-121, 147, 199-200"
+    }
+  },
+
+  "elevation_and_surfaces": {
+    "ObsidianSurface": {
+      "ref": "ui/components/ObsidianSurface.kt",
+      "recipe": "verticalGradient ObsidianSurfaceElevated -> ObsidianSurface + 1dp top specular hairline (SpecularHighlightStrong top edge) + subtle inner shadow; press scale 0.975 (Snappy)",
+      "default_radius_dp": 18
+    },
+    "hud_sheet": { "container": "ObsidianBase", "tonal_elevation_dp": 0, "dragHandle": "custom cyan", "ref": "ui/components/TelemetryHudSheet.kt:59-64" },
+    "note": "No other elevations set anywhere; the system is flat glass + hairlines, not shadows."
+  },
+
+  "icons": {
+    "note": "All from androidx.compose.material.icons (bundled library). No custom vector drawables except the logo PNG.",
+    "used": [
+      { "icon": "Icons.Rounded.Menu",                    "where": "header menu button",            "ref": "ui/components/TelemetryHeader.kt:96" },
+      { "icon": "Icons.Rounded.Refresh",                 "where": "header regenerate (session only)", "ref": "ui/components/TelemetryHeader.kt:139" },
+      { "icon": "Icons.Rounded.Add",                     "where": "header new chat",               "ref": "ui/components/TelemetryHeader.kt:146" },
+      { "icon": "Icons.Default.Add",                     "where": "drawer new session",            "ref": "ui/ChatScreen.kt:510" },
+      { "icon": "Icons.Default.Settings",                "where": "drawer settings row",           "ref": "ui/ChatScreen.kt:548" },
+      { "icon": "Icons.Default.DeleteOutline",           "where": "drawer delete session",         "ref": "ui/ChatScreen.kt:596" },
+      { "icon": "Icons.Default.SmartToy",                "where": "assistant avatar 28dp box",     "ref": "ui/ChatScreen.kt:931" },
+      { "icon": "Icons.Default.ContentCopy",             "where": "assistant copy (14dp)",         "ref": "ui/ChatScreen.kt:997" },
+      { "icon": "Icons.AutoMirrored.Filled.VolumeOff",   "where": "TTS unavailable (14dp)",        "ref": "ui/ChatScreen.kt:1161" },
+      { "icon": "Icons.AutoMirrored.Filled.Send",        "where": "send pill (20dp) + prompt cards (14dp)", "ref": "ui/ChatScreen.kt:1404,1539" },
+      { "icon": "Icons.Default.Mic",                     "where": "composer mic pill (20dp)",      "ref": "ui/ChatScreen.kt:1416" },
+      { "icon": "Icons.AutoMirrored.Filled.ArrowBack",   "where": "settings + sub-page back",      "ref": "ui/screens/SettingsScreen.kt:554; ui/screens/PersonaMemoryScreen.kt:109; ui/screens/ChatsStorageScreen.kt:148" },
+      { "icon": "Icons.Default.ChevronRight",            "where": "settings chevron rows",         "ref": "ui/screens/SettingsScreen.kt:630" }
+    ],
+    "drawn_shapes": [
+      { "shape": "stop square 12dp radius 3dp TelemetryCrimson on crimson glass pill", "ref": "ui/ChatScreen.kt:1409-1414" },
+      { "shape": "footer dot 4dp circle StarkCyanPrimary @0.7", "ref": "ui/ChatScreen.kt:1086-1090" },
+      { "shape": "backend dot 6dp radius 3dp Emerald (GPU/REMOTE) or Amber (CPU)", "ref": "ui/components/TelemetryHudSheet.kt:131-136" },
+      { "shape": "tip dot 6dp TelemetryAmber", "ref": "ui/components/TelemetryHudSheet.kt:210-214" },
+      { "shape": "speak halo 18dp circle (pulse when speaking)", "ref": "ui/ChatScreen.kt:1116-1169" }
+    ],
+    "logo_asset": { "file": "app/src/main/res/drawable/friday_logo_blue.png", "sizes_dp": { "header": 28, "drawer": 28, "empty_state": 64 }, "ref": "ui/components/TelemetryHeader.kt:101-111; ui/ChatScreen.kt:497-501,744-749" }
+  },
+
+  "strings": {
+    "strings_xml": { "app_name": "F.R.I.D.A.Y", "ref": "app/src/main/res/values/strings.xml:2", "note": "Every other user-facing string is an inline literal in Kotlin." },
+    "header": {
+      "brand": "F.R.I.D.A.Y",
+      "session_title_fallback": "New session",
+      "ref": "ui/components/TelemetryHeader.kt:115; ui/ChatScreen.kt:704"
+    },
+    "navigation_drawer": {
+      "brand": "F.R.I.D.A.Y", "ref": "ui/ChatScreen.kt:504",
+      "sessions_label": "Sessions", "ref": "ui/ChatScreen.kt:521",
+      "settings_label": "Settings", "ref": "ui/ChatScreen.kt:550",
+      "messages_suffix": "\"${n} messages\"", "ref": "ui/ChatScreen.kt:589",
+      "status_default": "No local model loaded", "ref": "app/src/main/java/com/friday/assistant/data/ChatModels.kt:54"
+    },
+    "empty_state": {
+      "brand": "F.R.I.D.A.Y", "ref": "ui/ChatScreen.kt:753",
+      "kicker": "READY FOR LOCAL INFERENCE", "ref": "ui/ChatScreen.kt:759",
+      "prompt_cards": [
+        "Draft a professional email reply",
+        "Explain a complex topic simply",
+        "Brainstorm weekend project ideas",
+        "Help me plan my day"
+      ],
+      "ref": "ui/ChatScreen.kt:726-731",
+      "cta": "Create new chat", "ref": "ui/ChatScreen.kt:777"
+    },
+    "composer": {
+      "placeholder_idle": "Message F.R.I.D.A.Y...",
+      "placeholder_generating": "Generating...",
+      "ref": "ui/ChatScreen.kt:1275",
+      "voice_prompt": "Speak to F.R.I.D.A.Y", "ref": "ui/ChatScreen.kt:229",
+      "a11y": ["Stop generating", "Send message", "Voice input"], "ref": "ui/ChatScreen.kt:1348-1352"
+    },
+    "bubbles": {
+      "assistant_brand": "F.R.I.D.A.Y", "ref": "ui/ChatScreen.kt:990",
+      "user_hint": "Tap to edit and resend, long press to copy", "ref": "ui/ChatScreen.kt:1015",
+      "streaming_label": "Streaming...", "ref": "ui/ChatScreen.kt:1057",
+      "greeting_new_session": "New session started. How can I help?", "ref": "ui/ChatViewModel.kt:459",
+      "greeting_chat_cleared": "Chat cleared. How can I help?", "ref": "ui/ChatViewModel.kt:597"
+    },
+    "metrics_footer": {
+      "format": "\"%.1f tok/s\" + \"  \\u2022  \" + \"%dms\" (under 1s) or \"%.2fs\" (over)",
+      "ref": "ui/ChatScreen.kt:1172-1183",
+      "chevron": "\\u203a", "ref": "ui/ChatScreen.kt:1106",
+      "note": "Footer shows ONLY tok/s and duration. TTFT is NOT in the footer; TTFT exists in GenerationMetrics and HUD history only."
+    },
+    "hud": {
+      "title": "INFERENCE TELEMETRY // DIAGNOSTICS", "ref": "ui/components/TelemetryHudSheet.kt:90",
+      "brand": "F.R.I.D.A.Y", "ref": "ui/components/TelemetryHudSheet.kt:99",
+      "stat_labels": ["DECODE SPEED", "TOTAL LATENCY", "COMPUTE BACKEND", "OUTPUT VOLUME"],
+      "ref": "ui/components/TelemetryHudSheet.kt:107,114,126,141",
+      "decode_format": "%.1f tok/s", "ref": "ui/components/TelemetryHudSheet.kt:108",
+      "latency_format": "%d ms under 1s, %.2fs above", "ref": "ui/components/TelemetryHudSheet.kt:299-300",
+      "backend_values": ["LOCAL // CPU", "LOCAL // GPU", "REMOTE API"], "ref": "ui/ChatScreen.kt:810-812",
+      "backend_blank_fallback": "UNKNOWN", "ref": "ui/components/TelemetryHudSheet.kt:127",
+      "backend_dot": "Emerald when contains GPU or REMOTE, Amber otherwise", "ref": "ui/components/TelemetryHudSheet.kt:122-135",
+      "volume_format": "~%d tokens", "ref": "ui/components/TelemetryHudSheet.kt:142",
+      "model_label": "ACTIVE MODEL", "ref": "ui/components/TelemetryHudSheet.kt:158",
+      "model_blank_fallback": "UNSPECIFIED MODEL", "ref": "ui/components/TelemetryHudSheet.kt:168",
+      "quant_tags": { "INT8": "filename contains int8", "FP16": "fp16", "4-BIT": "wi4|int4|4bit|q4", "STANDARD": "otherwise" },
+      "quant_ref": "ui/components/TelemetryHudSheet.kt:303-309",
+      "tip_gate": "tok/s < 3.0 AND backend == LOCAL // CPU", "ref": "ui/components/TelemetryHudSheet.kt:199",
+      "tip_label": "PERFORMANCE TIP", "ref": "ui/components/TelemetryHudSheet.kt:218",
+      "tip_text": "CPU int8 decode is memory-bandwidth bound. Enable Use GPU backend in Settings, or switch to a 4-bit quantized model (wi4b32) for faster responses.",
+      "tip_ref": "ui/components/TelemetryHudSheet.kt:228-229",
+      "tip_cta": "Open Settings", "ref": "ui/components/TelemetryHudSheet.kt:238"
+    },
+    "settings": {
+      "title": "SETTINGS", "ref": "ui/screens/SettingsScreen.kt:258",
+      "sections": ["NEURAL ENGINE", "VOICE & SPEECH", "MEMORY & PERSONA", "STORAGE & DIAGNOSTICS"],
+      "ref": "ui/screens/SettingsScreen.kt:269,449,473,483",
+      "mode_chips": ["Local (LiteRT-LM)", "Remote API"], "ref": "ui/screens/SettingsScreen.kt:280-281",
+      "mode_active_lines": [
+        "Active: Remote API. FRIDAY will send messages to your configured endpoint.",
+        "Active: Local (LiteRT-LM). FRIDAY will use the on-device model."
+      ],
+      "ref": "ui/screens/SettingsScreen.kt:286-288",
+      "endpoint_label": "Remote API endpoint", "ref": "ui/screens/SettingsScreen.kt:296",
+      "endpoint_status": [
+        "Endpoint configured and will be used for chat.",
+        "No endpoint configured. Add a URL to use Remote API."
+      ],
+      "ref": "ui/screens/SettingsScreen.kt:313",
+      "model_path_label": "Model path", "ref": "ui/screens/SettingsScreen.kt:341",
+      "model_path_placeholder": "/storage/.../models/model.litertlm", "ref": "ui/screens/SettingsScreen.kt:341",
+      "buttons": ["Load model", "Loading...", "Unload", "Refresh"], "ref": "ui/screens/SettingsScreen.kt:344-346",
+      "model_manager_label": "Model manager", "ref": "ui/screens/SettingsScreen.kt:350",
+      "preloaded_copy": "Preloaded with the app (copied to device on first launch): Qwen3-0.6B (default, 343 MB), Granite 4.0 350M int8 (416 MB), Granite 4.0 350M fp16 (690 MB). Tap a model below to select it, then Load model.",
+      "preloaded_ref": "ui/screens/SettingsScreen.kt:356",
+      "available_models_label": "Available models", "ref": "ui/screens/SettingsScreen.kt:362",
+      "empty_models": "No .litertlm models found in app storage.", "ref": "ui/screens/SettingsScreen.kt:369",
+      "row_actions": ["Selected", "Use"], "ref": "ui/screens/SettingsScreen.kt:403",
+      "gpu_row": "Use GPU backend", "ref": "ui/screens/SettingsScreen.kt:418",
+      "gpu_subtitle": "Try GPU for supported models/devices; behavior depends on runtime.", "ref": "ui/screens/SettingsScreen.kt:420",
+      "loaded_line": "\"Loaded: <path>\"", "ref": "ui/screens/SettingsScreen.kt:430",
+      "error_line": "\"Error: <e>\"", "ref": "ui/screens/SettingsScreen.kt:438",
+      "speak_row": "Speak replies aloud", "ref": "ui/screens/SettingsScreen.kt:460",
+      "speak_subtitle": "Reads assistant replies and session greetings with on-device text-to-speech. Tap the speaker icon on a reply to hear it on demand.",
+      "speak_ref": "ui/screens/SettingsScreen.kt:462",
+      "persona_row": "Persona & memory", "ref": "ui/screens/SettingsScreen.kt:476",
+      "persona_subtitle": "Behavior prompt, persistent memories, and on-chat extraction.", "ref": "ui/screens/SettingsScreen.kt:477",
+      "chats_row": "Chats & storage", "ref": "ui/screens/SettingsScreen.kt:486",
+      "chats_subtitle": "Sessions, rename, import/export, and clearing stored history.", "ref": "ui/screens/SettingsScreen.kt:487",
+      "diagnostics_row": "Diagnostics", "ref": "ui/screens/SettingsScreen.kt:495",
+      "diagnostics_subtitle": "Snapshot of device, model, and last generation state. Copy it into a bug report.", "ref": "ui/screens/SettingsScreen.kt:501",
+      "copy_button": "Copy diagnostics", "ref": "ui/screens/SettingsScreen.kt:522",
+      "toast": "Diagnostics copied", "ref": "ui/screens/SettingsScreen.kt:524",
+      "subpage_titles": { "persona": "PERSONA & MEMORY", "chats": "CHATS & STORAGE" },
+      "subpage_refs": "ui/screens/PersonaMemoryScreen.kt:113; ui/screens/ChatsStorageScreen.kt:152"
+    },
+    "diagnostics_format": {
+      "lines": [
+        "Device: <device>",
+        "OS: <androidVersion>",
+        "ABI: <abi>",
+        "App: v<appVersion>",
+        "Mode: <inferenceMode>",
+        "Model: <modelFile or (none)>",
+        "Last model load: <ms> ms   (optional)",
+        "Last generation: <ms> ms   (optional)",
+        "Last error: <e>            (optional)",
+        "Sessions: <n> (<m> messages)",
+        "TTS: ready | unavailable"
+      ],
+      "ref": "ui/screens/SettingsScreen.kt:820-832"
+    },
+    "boot_and_preparing": {
+      "telemetry_line": "ON-DEVICE NEURAL CORE // READY", "ref": "ui/intro/LogoIntro.kt:68",
+      "preparing_title": "Preparing F.R.I.D.A.Y", "ref": "ui/screens/PreparingScreen.kt:179",
+      "preparing_body": "Copying bundled models for first launch. This can take several minutes and only happens once.", "ref": "ui/screens/PreparingScreen.kt:185"
+    }
+  },
+
+  "motion": {
+    "source": "ui/theme/Motion.kt",
+    "durations_ms": { "Micro": 90, "Quick": 150, "Short": 250, "Medium": 380, "Long": 650, "BootTotal": 2600, "ref": "ui/theme/Motion.kt:44-49" },
+    "boot_stages_ms": { "ReticleEnd": 650, "EmblemEnd": 650, "EmblemPopEnd": 350, "ArcStart": 250, "ArcEnd": 1350, "Shockwave": [1150, 1700], "Wordmark": [650, 1750], "Telemetry": [1300, 1750], "HoldEnd": 2150, "DockEnd": 2600, "ref": "ui/theme/Motion.kt:54-68" },
+    "curves": { "Emphasized": "cubic-bezier(0.2,0,0,1)", "HudLock": "cubic-bezier(0.05,0.75,0.1,1)", "OpticalEase": "cubic-bezier(0.4,0,0.2,1)", "LogoPopEase": "cubic-bezier(0.34,1.56,0.64,1)", "ref": "ui/theme/Motion.kt:71-78" },
+    "springs": { "LogoPop": { "damping": 0.60, "stiffness": 260 }, "Snappy": { "damping": 0.82, "stiffness": 450 }, "ref": "ui/theme/Motion.kt:81-84" },
+    "component_motions": {
+      "message_entrance": "user slide-up 12dp+fade 240ms; assistant fade 220ms; Emphasized", "ref": "ui/ChatScreen.kt:890-901",
+      "metrics_footer_reveal": "fade 240ms + expandVertically 220ms", "ref": "ui/ChatScreen.kt:1075-1077",
+      "composer_border_ignite": "180ms color tween + halo alpha 0.28", "ref": "ui/ChatScreen.kt:1210-1221",
+      "prompt_card_entrance": "stagger 55ms/card, 320ms Emphasized, rise 14dp", "ref": "ui/ChatScreen.kt:1496,1508-1518",
+      "press_scales": { "ObsidianSurface": 0.975, "composer_action": 0.90, "chevron_row": 0.985, "action_button": 0.97 }
+    }
+  },
+
+  "data_model": {
+    "GenerationMetrics": { "fields": ["ttftMs", "totalMs", "estimatedTokens", "tokensPerSec", "modelName", "backendLabel"], "estimated_note": "estimatedTokens = chars/4", "ref": "app/src/main/java/com/friday/assistant/data/ChatModels.kt:71+; ui/ChatScreen.kt:821" },
+    "SavedGenerationMetrics": { "fields": ["tokensPerSecond", "durationMs", "modelName", "backendLabel", "estimatedTokens", "timestampMs"], "ref": "ui/telemetry/GenerationTelemetryCache.kt:12-19" },
+    "persistence": "SharedPreferences file friday_generation_metrics, key metrics_v1, LRU cap 500; cleared on clear-current (per-message) and clear-all; survives relaunch only",
+    "persistence_ref": "ui/telemetry/GenerationTelemetryCache.kt",
+    "backend_label_rule": "REMOTE_API -> REMOTE API; useGpu -> LOCAL // GPU; else LOCAL // CPU", "ref": "ui/ChatScreen.kt:809-813"
+  }
+}

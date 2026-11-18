@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<!-- 06_hud: telemetry HUD bottom sheet over the chat (tip hidden: tok/s >= 3.0).
+     TelemetryHudSheet.kt:59-198, HudStatCard 251+. Values are PLACEHOLDER (data-placeholder). -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="components.css">
+<title>06_hud</title>
+</head>
+<body>
+<div class="screen">
+
+  <!-- layer: statusbar -->
+  <div class="layer statusbar">
+    <span class="sb-time">10:08</span>
+    <div class="sb-icons">
+      <svg style="width:16rem;height:16rem" viewBox="0 0 24 24"><path d="M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C16.93 2.93 7.08 2.93 1 9zm8 8l3 3 3-3c-1.65-1.66-4.34-1.66-6 0zm-4-4l2 2c2.76-2.76 7.24-2.76 10 0l2-2C15.14 9.14 8.87 9.14 5 13z"/></svg>
+      <svg style="width:15rem;height:15rem" viewBox="0 0 24 24"><path d="M2 22h20V2L2 22z"/></svg>
+      <svg style="width:10rem;height:16rem" viewBox="0 0 10 16"><path d="M3 0h4v1.5h1.5c.6 0 1 .4 1 1V15c0 .6-.4 1-1 1h-6c-.6 0-1-.4-1-1V2.5c0-.6.4-1 1-1H3V0z"/></svg>
+    </div>
+  </div>
+
+  <!-- layer: header (behind scrim) -->
+  <header class="layer header">
+    <div class="header-row">
+      <div class="icon-btn"><svg viewBox="0 0 24 24" style="fill:#F4F4F6"><path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/></svg></div>
+      <img class="logo" src="assets/friday-logo.png" alt="F.R.I.D.A.Y logo">
+      <div class="header-col">
+        <div class="brand-line">F.R.I.D.A.Y</div>
+        <div class="session-line">New session</div>
+      </div>
+      <div class="icon-btn"><svg viewBox="0 0 24 24" style="fill:#63636E"><path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-8 8s3.58 8 8 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg></div>
+      <div class="icon-btn"><svg viewBox="0 0 24 24" style="fill:#63636E"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg></div>
+    </div>
+  </header>
+
+  <!-- layer: thread (behind scrim) -->
+  <div class="layer thread">
+    <div class="thread-inner">
+      <div class="msg user">
+        <div class="bubble">
+          <div class="bubble-hint">Tap to edit and resend, long press to copy</div>
+          <div class="bubble-text">Draft a professional email reply</div>
+        </div>
+      </div>
+      <div class="msg assistant">
+        <div class="avatar"><svg viewBox="0 0 24 24"><path d="M20 9V7c0-1.1-.9-2-2-2h-3c0-1.66-1.34-3-3-3S9 3.34 9 5H6c-1.1 0-2 .9-2 2v2c-1.66 0-3 1.34-3 3s1.34 3 3 3v4c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2v-4c1.66 0 3-1.34 3-3s-1.34-3-3-3zM9 17H7v-2h2v2zm0-4H7v-2h2v2zm8 4h-2v-2h2v2zm0-4h-2v-2h2v2z"/></svg></div>
+        <div class="bubble" style="border-radius:6rem 20rem 20rem 20rem">
+          <div class="bubble-head">
+            <div class="bubble-brand">F.R.I.D.A.Y</div>
+            <div class="icon-btn"><svg viewBox="0 0 24 24"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg></div>
+          </div>
+          <div class="bubble-text" data-placeholder>Here is a concise draft you can send as is.<br><br>Subject: Quick follow-up on our roadmap<br><br>Hi Jordan,<br><br>Thanks for the notes. I have folded your feedback into the plan and attached a revised timeline. Two items stay open: the QA handoff date and the beta scope. I will confirm both by Friday.<br><br>Best,<br>Alex</div>
+        </div>
+      </div>
+      <div class="footer-metrics">
+        <div class="footer-dot"></div>
+        <div class="footer-text" data-placeholder>12.6 tok/s&#160;&#160;&#8226;&#160;&#160;2.41s</div>
+        <div class="footer-chev">&#8250;</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- layer: composer (behind scrim) -->
+  <div class="layer composer">
+    <div class="composer-row">
+      <div class="capsule"><span class="ph">Message F.R.I.D.A.Y...</span></div>
+      <div class="composer-action"><div class="action-pill mic"><svg viewBox="0 0 24 24"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.91-3c-.49 0-.9.36-.98.85C16.52 14.2 14.47 16 12 16s-4.52-1.8-4.93-4.15c-.08-.49-.49-.85-.98-.85-.61 0-1.09.54-1 1.14.49 3 2.89 5.35 5.91 5.78V20c0 .55.45 1 1 1s1-.45 1-1v-2.08c3.02-.43 5.42-2.78 5.91-5.78.1-.6-.39-1.14-1-1.14z"/></svg></div></div>
+    </div>
+  </div>
+
+  <!-- layer: hud scrim + sheet -->
+  <div class="layer hud-scrim"></div>
+  <div class="hud-sheet layer">
+    <div class="hud-handle"></div>
+    <div class="hud-kicker">INFERENCE TELEMETRY // DIAGNOSTICS</div>
+    <div class="hud-brand">F.R.I.D.A.Y</div>
+    <div class="hud-grid">
+      <div class="hud-row">
+        <div class="hud-card obs"><div class="lbl">DECODE SPEED</div><div class="val v16" style="color:#7DD3FC" data-placeholder>12.6 tok/s</div></div>
+        <div class="hud-card obs"><div class="lbl">TOTAL LATENCY</div><div class="val v16" style="color:#F4F4F6" data-placeholder>2.41s</div></div>
+      </div>
+      <div class="hud-row">
+        <div class="hud-card obs"><div class="lbl">COMPUTE BACKEND</div><div class="val-row"><i style="background:#FBBF24"></i><div class="val v12" style="color:#A1A1AA" data-placeholder>LOCAL // CPU</div></div></div>
+        <div class="hud-card obs"><div class="lbl">OUTPUT VOLUME</div><div class="val v14" style="color:#F4F4F6" data-placeholder>~214 tokens</div></div>
+      </div>
+      <div class="hud-model obs">
+        <div class="lbl">ACTIVE MODEL</div>
+        <div class="row">
+          <div class="name" data-placeholder>granite-4.0-350m-fp16.litertlm</div>
+          <div class="hud-quant">FP16</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- layer: navbar -->
+  <div class="layer navbar"><div class="nav-pill"></div></div>
+
+</div>
+</body>
+</html>

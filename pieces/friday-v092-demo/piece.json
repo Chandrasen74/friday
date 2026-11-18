@@ -1,0 +1,22 @@
+{
+  "name": "friday-v092-demo",
+  "title": "FRIDAY v0.9.2 feature demo",
+  "format": { "width": 1080, "height": 1920, "fps": 30, "bpm": 120, "duration": 52.0, "frames": 1560 },
+  "storyFormat": "deterministic morph chain",
+  "style": "isometric",
+  "build": [
+    "src/head.html",
+    "kit/core.js",
+    "style",
+    "src/scenes.js",
+    "src/scenes2.js",
+    "src/bridges.js",
+    "kit/morph.js",
+    "src/override.js",
+    "kit/board.js",
+    "kit/score-head.js",
+    "src/score.js",
+    "kit/score-tail.js"
+  ],
+  "review": { "safe": { "top": 250, "bottom": 420, "right": 140 }, "deadMax": 4.5, "refs": {} }
+}

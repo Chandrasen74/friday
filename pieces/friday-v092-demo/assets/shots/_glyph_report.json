@@ -1,0 +1,175 @@
+{
+  "01_home": {
+    "orbitron_lockup": true,
+    "roboto_lockup": true,
+    "roboto_bullet": true,
+    "roboto_chevron": true,
+    "roboto_slash": true,
+    "loaded_fonts": [
+      "Orbitron",
+      "Roboto",
+      "Roboto",
+      "Roboto"
+    ]
+  },
+  "02_models": {
+    "orbitron_lockup": true,
+    "roboto_lockup": true,
+    "roboto_bullet": true,
+    "roboto_chevron": true,
+    "roboto_slash": true,
+    "loaded_fonts": [
+      "Orbitron",
+      "Roboto",
+      "Roboto",
+      "Roboto"
+    ]
+  },
+  "03_compose": {
+    "orbitron_lockup": true,
+    "roboto_lockup": true,
+    "roboto_bullet": true,
+    "roboto_chevron": true,
+    "roboto_slash": true,
+    "loaded_fonts": [
+      "Orbitron",
+      "Roboto",
+      "Roboto"
+    ]
+  },
+  "03_compose_typed": {
+    "orbitron_lockup": true,
+    "roboto_lockup": true,
+    "roboto_bullet": true,
+    "roboto_chevron": true,
+    "roboto_slash": true,
+    "loaded_fonts": [
+      "Orbitron",
+      "Roboto",
+      "Roboto"
+    ]
+  },
+  "04_stream_a": {
+    "orbitron_lockup": true,
+    "roboto_lockup": true,
+    "roboto_bullet": true,
+    "roboto_chevron": true,
+    "roboto_slash": true,
+    "loaded_fonts": [
+      "Orbitron",
+      "Roboto",
+      "Roboto"
+    ]
+  },
+  "04_stream_b": {
+    "orbitron_lockup": true,
+    "roboto_lockup": true,
+    "roboto_bullet": true,
+    "roboto_chevron": true,
+    "roboto_slash": true,
+    "loaded_fonts": [
+      "Orbitron",
+      "Roboto",
+      "Roboto"
+    ]
+  },
+  "04_stream_c": {
+    "orbitron_lockup": true,
+    "roboto_lockup": true,
+    "roboto_bullet": true,
+    "roboto_chevron": true,
+    "roboto_slash": true,
+    "loaded_fonts": [
+      "Orbitron",
+      "Roboto",
+      "Roboto"
+    ]
+  },
+  "05_footer": {
+    "orbitron_lockup": true,
+    "roboto_lockup": true,
+    "roboto_bullet": true,
+    "roboto_chevron": true,
+    "roboto_slash": true,
+    "loaded_fonts": [
+      "Orbitron",
+      "Roboto",
+      "Roboto"
+    ]
+  },
+  "06_hud": {
+    "orbitron_lockup": true,
+    "roboto_lockup": true,
+    "roboto_bullet": true,
+    "roboto_chevron": true,
+    "roboto_slash": true,
+    "loaded_fonts": [
+      "Orbitron",
+      "Roboto",
+      "Roboto"
+    ]
+  },
+  "07_tip": {
+    "orbitron_lockup": true,
+    "roboto_lockup": true,
+    "roboto_bullet": true,
+    "roboto_chevron": true,
+    "roboto_slash": true,
+    "loaded_fonts": [
+      "Orbitron",
+      "Roboto",
+      "Roboto",
+      "Roboto"
+    ]
+  },
+  "08_settings": {
+    "orbitron_lockup": true,
+    "roboto_lockup": true,
+    "roboto_bullet": true,
+    "roboto_chevron": true,
+    "roboto_slash": true,
+    "loaded_fonts": [
+      "Orbitron",
+      "Roboto",
+      "Roboto",
+      "Roboto"
+    ]
+  },
+  "09_relaunch_before": {
+    "orbitron_lockup": true,
+    "roboto_lockup": true,
+    "roboto_bullet": true,
+    "roboto_chevron": true,
+    "roboto_slash": true,
+    "loaded_fonts": [
+      "Orbitron",
+      "Roboto",
+      "Roboto"
+    ]
+  },
+  "09_relaunch_after": {
+    "orbitron_lockup": true,
+    "roboto_lockup": true,
+    "roboto_bullet": true,
+    "roboto_chevron": true,
+    "roboto_slash": true,
+    "loaded_fonts": [
+      "Orbitron",
+      "Roboto",
+      "Roboto"
+    ]
+  },
+  "10_about": {
+    "orbitron_lockup": true,
+    "roboto_lockup": true,
+    "roboto_bullet": true,
+    "roboto_chevron": true,
+    "roboto_slash": true,
+    "loaded_fonts": [
+      "Orbitron",
+      "Roboto",
+      "Roboto",
+      "Roboto"
+    ]
+  }
+}
