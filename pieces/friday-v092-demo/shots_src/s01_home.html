@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<!-- 01_home: empty state, no session, no composer.
+     ChatScreen.kt:700-778 (empty branch), PromptCard 1485-1553, ActionButton SettingsScreen.kt:769. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="components.css">
+<title>01_home</title>
+</head>
+<body>
+<div class="screen">
+
+  <!-- layer: statusbar -->
+  <div class="layer statusbar">
+    <span class="sb-time">10:08</span>
+    <div class="sb-icons">
+      <svg style="width:16rem;height:16rem" viewBox="0 0 24 24"><path d="M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C16.93 2.93 7.08 2.93 1 9zm8 8l3 3 3-3c-1.65-1.66-4.34-1.66-6 0zm-4-4l2 2c2.76-2.76 7.24-2.76 10 0l2-2C15.14 9.14 8.87 9.14 5 13z"/></svg>
+      <svg style="width:15rem;height:15rem" viewBox="0 0 24 24"><path d="M2 22h20V2L2 22z"/></svg>
+      <svg style="width:10rem;height:16rem" viewBox="0 0 10 16"><path d="M3 0h4v1.5h1.5c.6 0 1 .4 1 1V15c0 .6-.4 1-1 1h-6c-.6 0-1-.4-1-1V2.5c0-.6.4-1 1-1H3V0z"/></svg>
+    </div>
+  </div>
+
+  <!-- layer: header (TelemetryHeader.kt:87-149, no regenerate when no session) -->
+  <header class="layer header">
+    <div class="header-row">
+      <div class="icon-btn"><svg viewBox="0 0 24 24" style="fill:#F4F4F6"><path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/></svg></div>
+      <img class="logo" src="assets/friday-logo.png" alt="F.R.I.D.A.Y logo">
+      <div class="header-col">
+        <div class="brand-line">F.R.I.D.A.Y</div>
+        <div class="session-line">New session</div>
+      </div>
+      <div class="icon-btn"><svg viewBox="0 0 24 24" style="fill:#63636E"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg></div>
+    </div>
+  </header>
+
+  <!-- layer: empty state -->
+  <div class="empty">
+    <div class="sp20"></div>
+    <div class="empty-core">
+      <div class="empty-aura"></div>
+      <img src="assets/friday-logo.png" alt="F.R.I.D.A.Y logo">
+    </div>
+    <div class="empty-brand">F.R.I.D.A.Y</div>
+    <div class="empty-kicker">READY FOR LOCAL INFERENCE</div>
+    <div class="prompt-list">
+      <div class="prompt-card obs"><svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg><span>Draft a professional email reply</span></div>
+      <div class="prompt-card obs"><svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg><span>Explain a complex topic simply</span></div>
+      <div class="prompt-card obs"><svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg><span>Brainstorm weekend project ideas</span></div>
+      <div class="prompt-card obs"><svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg><span>Help me plan my day</span></div>
+    </div>
+    <div class="action-btn primary" style="margin-top:8rem">Create new chat</div>
+  </div>
+
+  <!-- layer: navbar (platform gesture pill) -->
+  <div class="layer navbar"><div class="nav-pill"></div></div>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<!-- 08_settings: settings MAIN page, NEURAL ENGINE section (Local mode), top of scroll.
+     SettingsScreen.kt:236-446. Model filenames + status pill text are PLACEHOLDER (data-placeholder). -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="components.css">
+<title>08_settings</title>
+</head>
+<body>
+<div class="screen">
+
+  <!-- layer: statusbar -->
+  <div class="layer statusbar">
+    <span class="sb-time">10:08</span>
+    <div class="sb-icons">
+      <svg style="width:16rem;height:16rem" viewBox="0 0 24 24"><path d="M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C16.93 2.93 7.08 2.93 1 9zm8 8l3 3 3-3c-1.65-1.66-4.34-1.66-6 0zm-4-4l2 2c2.76-2.76 7.24-2.76 10 0l2-2C15.14 9.14 8.87 9.14 5 13z"/></svg>
+      <svg style="width:15rem;height:15rem" viewBox="0 0 24 24"><path d="M2 22h20V2L2 22z"/></svg>
+      <svg style="width:10rem;height:16rem" viewBox="0 0 10 16"><path d="M3 0h4v1.5h1.5c.6 0 1 .4 1 1V15c0 .6-.4 1-1 1h-6c-.6 0-1-.4-1-1V2.5c0-.6.4-1 1-1H3V0z"/></svg>
+    </div>
+  </div>
+
+  <!-- layer: settings top bar (SettingsScreen.kt:539-576) -->
+  <div class="settings-top">
+    <div class="settings-top-row">
+      <div class="icon-btn"><svg viewBox="0 0 24 24" style="fill:#F4F4F6"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg></div>
+      <div class="settings-title">SETTINGS</div>
+    </div>
+  </div>
+
+  <!-- layer: settings body -->
+  <div class="settings-body">
+    <div class="section-header">NEURAL ENGINE</div>
+
+    <div class="settings-card obs">
+      <div class="settings-text" style="font:600 14rem/20rem var(--font-ui);color:#F4F4F6">Inference mode</div>
+      <div class="chip-row" style="margin-top:8rem">
+        <div class="mode-chip on">Local (LiteRT-LM)</div>
+        <div class="mode-chip off">Remote API</div>
+      </div>
+      <div class="settings-text" style="margin-top:8rem;color:#7DD3FC">Active: Local (LiteRT-LM). FRIDAY will use the on-device model.</div>
+
+      <div style="margin-top:16rem">
+        <div class="settings-text" style="font:600 14rem/20rem var(--font-ui);color:#F4F4F6">On-device model (LiteRT-LM)</div>
+        <div class="settings-text" style="margin-top:6rem">Use a .litertlm model. Bundled model is auto-detected; you can also provide a local path.</div>
+        <div class="status-pill" style="margin-top:10rem">
+          <i style="background:#A1A1AA" data-placeholder></i>
+          <span data-placeholder>No local model loaded</span>
+        </div>
+        <div class="field-label" style="margin-top:10rem">Model path</div>
+        <div class="text-field" style="margin-top:6rem">
+          <div class="ph">/storage/.../models/model.litertlm</div>
+        </div>
+        <div class="row gap10" style="margin-top:10rem">
+          <div class="action-btn primary">Load model</div>
+          <div class="action-btn secondary">Unload</div>
+          <div class="action-btn secondary">Refresh</div>
+        </div>
+        <div class="settings-label-l" style="margin-top:14rem">Model manager</div>
+        <div class="settings-text" style="margin-top:6rem">Preloaded with the app (copied to device on first launch): Qwen3-0.6B (default, 343 MB), Granite 4.0 350M int8 (416 MB), Granite 4.0 350M fp16 (690 MB). Tap a model below to select it, then Load model.</div>
+        <div class="settings-label-l" style="margin-top:12rem">Available models</div>
+        <div style="margin-top:6rem;display:flex;flex-direction:column;gap:8rem">
+          <div class="model-row sel">
+            <div class="col">
+              <div class="n1" data-placeholder>qwen3-0.6b.litertlm</div>
+              <div class="n2" data-placeholder>/data/user/0/com.friday.assistant/files/models/qwen3-0.6b.litertlm</div>
+            </div>
+            <div class="use sel">Selected</div>
+          </div>
+          <div class="model-row">
+            <div class="col">
+              <div class="n1" data-placeholder>granite-4.0-350m-int8.litertlm</div>
+              <div class="n2" data-placeholder>/data/user/0/com.friday.assistant/files/models/granite-4.0-350m-int8.litertlm</div>
+            </div>
+            <div class="use">Use</div>
+          </div>
+          <div class="model-row">
+            <div class="col">
+              <div class="n1" data-placeholder>granite-4.0-350m-fp16.litertlm</div>
+              <div class="n2" data-placeholder>/data/user/0/com.friday.assistant/files/models/granite-4.0-350m-fp16.litertlm</div>
+            </div>
+            <div class="use">Use</div>
+          </div>
+        </div>
+        <div class="row" style="margin-top:14rem;align-items:flex-start">
+          <div class="col grow">
+            <div class="settings-text" style="font:400 15.5rem/23rem var(--font-ui);color:#F4F4F6">Use GPU backend</div>
+            <div class="settings-text" style="margin-top:2rem">Try GPU for supported models/devices; behavior depends on runtime.</div>
+          </div>
+          <div class="switch"><i></i></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- layer: navbar -->
+  <div class="layer navbar"><div class="nav-pill"></div></div>
+
+</div>
+</body>
+</html>

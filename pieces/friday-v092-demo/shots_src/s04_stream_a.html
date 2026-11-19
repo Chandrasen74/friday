@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<!-- 04_stream_a: reply streaming, typing dots frame, plasma border, STOP composer.
+     ChatScreen.kt:1021-1068 (typing branch + plasma), 1057 (Streaming...), 1392-1394 (stop pill).
+     Reply text is a PLACEHOLDER (no real response text supplied yet). -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="components.css">
+<title>04_stream_a</title>
+</head>
+<body>
+<div class="screen">
+
+  <!-- layer: statusbar -->
+  <div class="layer statusbar">
+    <span class="sb-time">10:08</span>
+    <div class="sb-icons">
+      <svg style="width:16rem;height:16rem" viewBox="0 0 24 24"><path d="M1 9l2 2c4.97-4.97 13.03-4.97 18 0l2-2C16.93 2.93 7.08 2.93 1 9zm8 8l3 3 3-3c-1.65-1.66-4.34-1.66-6 0zm-4-4l2 2c2.76-2.76 7.24-2.76 10 0l2-2C15.14 9.14 8.87 9.14 5 13z"/></svg>
+      <svg style="width:15rem;height:15rem" viewBox="0 0 24 24"><path d="M2 22h20V2L2 22z"/></svg>
+      <svg style="width:10rem;height:16rem" viewBox="0 0 10 16"><path d="M3 0h4v1.5h1.5c.6 0 1 .4 1 1V15c0 .6-.4 1-1 1h-6c-.6 0-1-.4-1-1V2.5c0-.6.4-1 1-1H3V0z"/></svg>
+    </div>
+  </div>
+
+  <!-- layer: header -->
+  <header class="layer header">
+    <div class="header-row">
+      <div class="icon-btn"><svg viewBox="0 0 24 24" style="fill:#F4F4F6"><path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/></svg></div>
+      <img class="logo" src="assets/friday-logo.png" alt="F.R.I.D.A.Y logo">
+      <div class="header-col">
+        <div class="brand-line">F.R.I.D.A.Y</div>
+        <div class="session-line">New session</div>
+      </div>
+      <div class="icon-btn"><svg viewBox="0 0 24 24" style="fill:#63636E"><path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-8 8s3.58 8 8 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg></div>
+      <div class="icon-btn"><svg viewBox="0 0 24 24" style="fill:#63636E"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg></div>
+    </div>
+  </header>
+
+  <!-- layer: thread -->
+  <div class="layer thread">
+    <div class="thread-inner">
+      <div class="msg user">
+        <div class="bubble">
+          <div class="bubble-hint">Tap to edit and resend, long press to copy</div>
+          <div class="bubble-text">Draft a professional email reply</div>
+        </div>
+      </div>
+      <div class="msg assistant">
+        <div class="avatar"><svg viewBox="0 0 24 24"><path d="M20 9V7c0-1.1-.9-2-2-2h-3c0-1.66-1.34-3-3-3S9 3.34 9 5H6c-1.1 0-2 .9-2 2v2c-1.66 0-3 1.34-3 3s1.34 3 3 3v4c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2v-4c1.66 0 3-1.34 3-3s-1.34-3-3-3zM9 17H7v-2h2v2zm0-4H7v-2h2v2zm8 4h-2v-2h2v2zm0-4h-2v-2h2v2z"/></svg></div>
+        <div class="plasma bubble" style="border-radius:6rem 20rem 20rem 20rem;min-height:56rem">
+          <div class="bubble-head"><div class="bubble-brand">F.R.I.D.A.Y</div></div>
+          <div class="dots"><i></i><i></i><i></i></div>
+          <div class="bubble-text streaming-label">Streaming...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- layer: composer (generating: STOP) -->
+  <div class="layer composer">
+    <div class="composer-row">
+      <div class="capsule"><span class="ph">Generating...</span></div>
+      <div class="composer-action"><div class="action-pill stop"><div class="stop-sq"></div></div></div>
+    </div>
+  </div>
+
+  <!-- layer: navbar -->
+  <div class="layer navbar"><div class="nav-pill"></div></div>
+
+</div>
+</body>
+</html>
