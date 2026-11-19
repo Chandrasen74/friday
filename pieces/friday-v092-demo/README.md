@@ -9,9 +9,11 @@ Deterministic, phone-first product film for FRIDAY (com.friday.assistant), rebui
 
 ## Final Video
 
-<video src="renders/final.mp4" poster="renders/poster.png" controls width="360"></video>
+<a href="renders/final.mp4">
+  <img src="renders/poster.png" alt="Final video poster (click to play or download)" width="360" />
+</a>
 
-- [Play / download final.mp4](renders/final.mp4)
+- [Play / download final.mp4](renders/final.mp4) (click the poster above, or use this link; GitHub does not inline-play repo videos in README pages)
 - [Poster frame](renders/poster.png)
 - [Audio master (WAV)](renders/audio.wav) | [Music stem](renders/stem-music.wav) | [SFX stem](renders/stem-sfx.wav)
 
