@@ -40,9 +40,17 @@ F.R.I.D.A.Y is an on-device-first personal assistant for Android inspired by Ton
 
 ## Screenshots
 
-| Chat | Sessions drawer | Conversation | Settings |
-| --- | --- | --- | --- |
-| ![F.R.I.D.A.Y chat](screenshots/demo-chat.png) | ![F.R.I.D.A.Y sessions drawer](screenshots/demo-drawer.png) | ![F.R.I.D.A.Y coding help conversation](screenshots/demo-chat2.png) | ![F.R.I.D.A.Y settings](screenshots/demo-settings.png) |
+Real app UI used in the reel, captured at 1080x2400.
+
+| Home | Models | Compose |
+| --- | --- | --- |
+| <img src="pieces/friday-v092-demo/assets/01_home.png" width="240" alt="F.R.I.D.A.Y home screen" /> | <img src="pieces/friday-v092-demo/assets/02_models.png" width="240" alt="F.R.I.D.A.Y model picker" /> | <img src="pieces/friday-v092-demo/assets/03_compose_typed.png" width="240" alt="F.R.I.D.A.Y compose screen with typed message" /> |
+
+| Streaming reply | Telemetry HUD | Settings |
+| --- | --- | --- |
+| <img src="pieces/friday-v092-demo/assets/04_stream_b.png" width="240" alt="F.R.I.D.A.Y streaming reply" /> | <img src="pieces/friday-v092-demo/assets/06_hud.png" width="240" alt="F.R.I.D.A.Y telemetry HUD" /> | <img src="pieces/friday-v092-demo/assets/08_settings.png" width="240" alt="F.R.I.D.A.Y settings" /> |
+
+More frames and review sheets in the [demo reel docs](pieces/friday-v092-demo/).
 
 ## Features
 
