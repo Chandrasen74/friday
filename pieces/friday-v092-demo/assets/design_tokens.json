@@ -2,7 +2,7 @@
   "_meta": {
     "piece": "friday-v092-demo",
     "purpose": "Design tokens extracted from F.R.I.D.A.Y Compose source for the shot-forging rebuild (Step 1 of SHOT FORGING).",
-    "authority": "Compose source only. File:line references are relative to repo root REPO_ROOT.",
+    "authority": "Compose source only. File:line references are relative to the repo root.",
     "prefix": "app/src/main/java/com/friday/assistant/",
     "unit_note": "All dp values are Compose density-independent pixels. The film renders at 1080x2400 CSS px for a 420dpi-class phone, so 1dp = 2.625px at 420dpi; but for exactness the shots use the app's 3x bucket mapping chosen per-screen and documented in shots_src.",
     "font_note": "The app bundles ONE font file: app/src/main/res/font/orbitron_bold.ttf (used at Bold/SemiBold/Normal weights, Type.kt:11-15). UI text uses FontFamily.SansSerif and telemetry uses FontFamily.Monospace, both platform defaults with no bundled file. See fonts.json decisions in shots_src.",
