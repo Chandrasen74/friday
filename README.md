@@ -1,7 +1,3 @@
-<!--
-feature: screenshots/demo-chat.png
-thumbnail: thumbnail.webp
--->
 <p align="center">
   <img src="screenshots/friday-logo.png" alt="F.R.I.D.A.Y logo" width="160" />
 </p>
