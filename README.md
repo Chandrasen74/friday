@@ -1,7 +1,7 @@
----
+<!--
 feature: 01-Projects/friday/screenshots/demo-chat.png
 thumbnail: thumbnails/resized/3d7f016053f196f27f5c3401c77c9074_86cf658e.webp
----
+-->
 <p align="center">
   <img src="screenshots/friday-logo.png" alt="F.R.I.D.A.Y logo" width="160" />
 </p>
