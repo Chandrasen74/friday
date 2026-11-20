@@ -70,11 +70,11 @@ The opening hit's decoded peak reads +2.66 dBFS: AAC transient overshoot on the 
 - Playwright/Chromium: omniroute global Playwright, Chromium `%LOCALAPPDATA%\ms-playwright\chromium-1255\chrome-win64\chrome.exe`, `--disable-gpu --use-gl=swiftshader --enable-unsafe-swiftshader`.
 
 ## Commands (this pass)
-1. `node "C:\Users\Kanchan Verma\.config\opencode\skills\creative\animate\tools\build.mjs" pieces/friday-v092-demo` -> `index.html` (1890 lines, 2 asset(s) embedded, syntax ok).
-2. `node "C:\Users\Kanchan Verma\.config\opencode\skills\creative\animate\tools\export.mjs" pieces/friday-v092-demo --no-audio --no-mux` -> `frames/f0000..f1559`.
+1. `node "$env:ANIMATE_TOOLS/build.mjs" pieces/friday-v092-demo` -> `index.html` (1890 lines, 2 asset(s) embedded, syntax ok).
+2. `node "$env:ANIMATE_TOOLS/export.mjs" pieces/friday-v092-demo --no-audio --no-mux` -> `frames/f0000..f1559`.
 3. `ffmpeg -y -hide_banner -loglevel error -framerate 30 -start_number 0 -i frames/f%04d.png -i renders/audio.wav -frames:v 1560 -t 52 -c:v libx264 -preset slow -crf 14 -pix_fmt yuv420p -r 30 -c:a aac -b:a 192k -ar 48000 -movflags +faststart renders/final.mp4` (exit 0).
 4. `ffmpeg -y -hide_banner -loglevel error -framerate 30 -start_number 0 -i frames/f%04d.png -i renders/audio.wav -frames:v 1560 -t 52 -c:v libx264 -preset slow -crf 24 -pix_fmt yuv420p -r 30 -c:a aac -b:a 192k -ar 48000 -movflags +faststart renders/share.mp4` (exit 0).
-5. `node "C:\Users\Kanchan Verma\.config\opencode\skills\creative\animate\tools\storyboard.mjs" pieces/friday-v092-demo pieces/friday-v092-demo/storyboard.png`.
+5. `node "$env:ANIMATE_TOOLS/storyboard.mjs" pieces/friday-v092-demo pieces/friday-v092-demo/storyboard.png`.
 6. Motion board (ffmpeg xstack, 3x11 start/peak/settle frames) -> `motion-board.png`.
 7. ffprobe metadata, `ffmpeg -v error -i ... -f null -` decode checks (final/share exit 0), `git diff --check` (exit 0). Frame intermediates removed after mux.
 

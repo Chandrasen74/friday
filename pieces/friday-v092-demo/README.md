@@ -84,17 +84,20 @@ Deterministic, phone-first product film for FRIDAY (com.friday.assistant), rebui
 From the piece root:
 
 ```powershell
+# All commands run from the piece root (pieces/friday-v092-demo).
+# ANIMATE_TOOLS points at the local animate skill tools directory.
+
 # Build
-node "C:\Users\Kanchan Verma\.config\opencode\skills\creative\animate\tools\build.mjs" "C:\Users\Kanchan Verma\OneDrive\Desktop\Opencode\01-Projects\friday\pieces\friday-v092-demo"
+node "$env:ANIMATE_TOOLS/build.mjs" .
 
 # Full export (frames + audio/stems + renders/final.mp4)
-node "C:\Users\Kanchan Verma\.config\opencode\skills\creative\animate\tools\export.mjs" "C:\Users\Kanchan Verma\OneDrive\Desktop\Opencode\01-Projects\friday\pieces\friday-v092-demo"
+node "$env:ANIMATE_TOOLS/export.mjs" .
 
 # Review gate (sheets + automated checks)
-node "C:\Users\Kanchan Verma\.config\opencode\skills\creative\animate\tools\review.mjs" "C:\Users\Kanchan Verma\OneDrive\Desktop\Opencode\01-Projects\friday\pieces\friday-v092-demo"
+node "$env:ANIMATE_TOOLS/review.mjs" .
 
 # Single still (example: poster)
-node "C:\Users\Kanchan Verma\.config\opencode\skills\creative\animate\tools\still.mjs" "C:\Users\Kanchan Verma\OneDrive\Desktop\Opencode\01-Projects\friday\pieces\friday-v092-demo" 50.0 "renders/poster.png"
+node "$env:ANIMATE_TOOLS/still.mjs" . 50.0 "renders/poster.png"
 ```
 
 `export.mjs` writes `renders/audio.wav` and stems from the in-piece score, encodes libx264 (crf 14, preset slow, yuv420p) + AAC, and muxes `renders/final.mp4`. Frame intermediates under `frames/` are regenerable and were removed after mux in the final pass.
