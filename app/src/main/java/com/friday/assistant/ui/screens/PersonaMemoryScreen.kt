@@ -66,6 +66,9 @@ internal fun PersonaMemoryScreen(
     onUpdateMemory: (String, String) -> Unit,
     onDeleteMemory: (String) -> Unit,
     onClearMemories: () -> Unit,
+    onApproveMemory: (String) -> Unit,
+    onDiscardMemory: (String) -> Unit,
+    onApproveAllMemories: () -> Unit,
     onExtractMemories: () -> Unit
 ) {
     val context = LocalContext.current
@@ -216,7 +219,11 @@ internal fun PersonaMemoryScreen(
                                 primary = true,
                                 enabled = !state.isMemoryBusy && !state.isGenerating
                             ) { onExtractMemories() }
-                            ActionButton("Clear all memories", primary = false, enabled = state.memories.isNotEmpty() && !state.isMemoryBusy) {
+                            ActionButton(
+                                "Clear all memories",
+                                primary = false,
+                                enabled = (state.memories.isNotEmpty() || state.pendingMemories.isNotEmpty()) && !state.isMemoryBusy
+                            ) {
                                 showClearMemoriesDialog = true
                             }
                         }
@@ -264,6 +271,70 @@ internal fun PersonaMemoryScreen(
             }
 
             item {
+                SettingsSectionHeader("PENDING REVIEW (${state.pendingMemories.size})")
+            }
+
+            if (state.pendingMemories.isEmpty()) {
+                item {
+                    Text(
+                        "No memories awaiting review.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = TextTertiary,
+                        modifier = Modifier.padding(start = 4.dp)
+                    )
+                }
+            } else {
+                item {
+                    ObsidianSurface(modifier = Modifier.fillMaxWidth()) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text(
+                                "Remote extractions are staged until you approve them.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = TextSecondary
+                            )
+                            Spacer(Modifier.height(10.dp))
+                            ActionButton(
+                                "Approve all",
+                                primary = true,
+                                enabled = !state.isMemoryBusy
+                            ) {
+                                onApproveAllMemories()
+                                Toast.makeText(context, "All pending memories approved", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }
+                }
+                items(state.pendingMemories, key = { it.id }) { pending ->
+                    ObsidianSurface(modifier = Modifier.fillMaxWidth()) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text(
+                                pending.content,
+                                color = TextPrimary,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                "Source: ${pending.source} | Origin: ${pending.origin.ifBlank { "unknown" }} | Model: ${pending.model.ifBlank { "not specified" }}",
+                                color = TextSecondary,
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                ActionButton("Approve", primary = true, enabled = !state.isMemoryBusy) {
+                                    onApproveMemory(pending.id)
+                                    Toast.makeText(context, "Memory approved", Toast.LENGTH_SHORT).show()
+                                }
+                                ActionButton("Discard", primary = false, enabled = !state.isMemoryBusy) {
+                                    onDiscardMemory(pending.id)
+                                    Toast.makeText(context, "Memory discarded", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            item {
                 SettingsSectionHeader("SAVED MEMORIES (${state.memories.size})")
             }
 
@@ -286,11 +357,20 @@ internal fun PersonaMemoryScreen(
                                 style = MaterialTheme.typography.bodySmall
                             )
                             Spacer(Modifier.height(4.dp))
+                            val isExtracted = mem.source.startsWith("extracted")
                             Text(
-                                if (mem.source == "extracted") "Extracted memory" else "Manual memory",
-                                color = if (mem.source == "extracted") StarkCyanPrimary else TextTertiary,
+                                if (isExtracted) "Extracted memory" else "Manual memory",
+                                color = if (isExtracted) StarkCyanPrimary else TextTertiary,
                                 style = MaterialTheme.typography.labelSmall
                             )
+                            if (isExtracted) {
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    "Source: ${mem.source} | Origin: ${mem.origin.ifBlank { "unknown" }} | Model: ${mem.model.ifBlank { "not specified" }}",
+                                    color = TextSecondary,
+                                    style = MaterialTheme.typography.labelSmall
+                                )
+                            }
                             Spacer(Modifier.height(8.dp))
                             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                                 ActionButton("Edit", primary = false, enabled = !state.isMemoryBusy) {

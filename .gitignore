@@ -39,3 +39,6 @@ app/src/main/assets/models/*.litertlm
 # Logs
 *.log
 
+# Local audit artifacts
+.audits/
+

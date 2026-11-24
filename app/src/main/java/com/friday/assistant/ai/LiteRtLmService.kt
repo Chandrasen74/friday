@@ -2,6 +2,7 @@ package com.friday.assistant.ai
 
 import android.content.Context
 import android.util.Log
+import com.friday.assistant.data.MemoryContext
 import com.friday.assistant.data.ModelStatus
 import com.google.ai.edge.litertlm.Backend
 import com.google.ai.edge.litertlm.Contents
@@ -89,11 +90,7 @@ class LiteRtLmService(private val appContext: Context) {
 
         val systemInstruction = buildString {
             append(systemPrompt.trim().ifBlank { com.friday.assistant.data.PersonaConfig.DEFAULT_PERSONA_PROMPT })
-            val mem = memories.map { it.trim() }.filter { it.isNotBlank() }.take(20)
-            if (mem.isNotEmpty()) {
-                append("\n\nPersistent memories about the user/context (use when relevant, do not invent):\n")
-                mem.forEachIndexed { _, m -> append("- ").append(m.take(300)).append('\n') }
-            }
+            append(MemoryContext.render(memories))
         }
         val conv = try {
             eng.createConversation(

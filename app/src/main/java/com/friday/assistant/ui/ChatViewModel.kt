@@ -5,6 +5,8 @@ import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.friday.assistant.ai.ApiInferenceService
+import com.friday.assistant.ai.CredentialBinding
+import com.friday.assistant.ai.EndpointSecurity
 import com.friday.assistant.ai.LiteRtLmService
 import com.friday.assistant.data.ApiEndpointConfig
 import com.friday.assistant.data.ChatMessage
@@ -13,7 +15,9 @@ import com.friday.assistant.data.ChatSession
 import com.friday.assistant.data.ChatStore
 import com.friday.assistant.data.GenerationMetrics
 import com.friday.assistant.data.InferenceMode
+import com.friday.assistant.data.MemoryContext
 import com.friday.assistant.data.MemoryItem
+import com.friday.assistant.data.MemorySnapshot
 import com.friday.assistant.data.MemoryStore
 import com.friday.assistant.data.ModelStatus
 import com.friday.assistant.data.PersonaConfig
@@ -29,6 +33,9 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.util.concurrent.atomic.AtomicLong
+
+private const val HTTPS_ENDPOINT_REQUIRED_MESSAGE =
+    "Endpoint URL must use https:// (for example https://api.example.com/v1). Cleartext http:// is not allowed."
 
 data class DiagnosticsInfo(
     val device: String = "",
@@ -64,6 +71,7 @@ data class ChatUiState(
     val apiTestMessage: String? = null,
     val personaConfig: PersonaConfig = PersonaConfig(),
     val memories: List<MemoryItem> = emptyList(),
+    val pendingMemories: List<MemoryItem> = emptyList(),
     val memoryBusyMessage: String? = null,
     val isMemoryBusy: Boolean = false,
     val speakReplies: Boolean = false,
@@ -119,6 +127,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             useGpu = savedUseGpu,
             personaConfig = memorySnapshot.persona,
             memories = memorySnapshot.memories,
+            pendingMemories = memorySnapshot.pending,
             speakReplies = savedSpeakReplies
         )
         pushDiagnostics()
@@ -209,8 +218,35 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.update { it.copy(inferenceMode = mode) }
         appPrefs.edit().putString("inference_mode", mode.name).apply()
     }
-    fun onApiBaseUrlChange(value: String) { updateApi { it.copy(baseUrl = value) } }
-    fun onApiKeyChange(value: String) { updateApi { it.copy(apiKey = value) } }
+    fun onApiBaseUrlChange(value: String) {
+        val current = _uiState.value.apiConfig
+        val change = CredentialBinding.onEndpointChanged(
+            currentKey = current.apiKey,
+            currentBoundOrigin = current.apiKeyOrigin,
+            newUrl = value
+        )
+        updateApi {
+            it.copy(
+                baseUrl = value,
+                apiKey = change.apiKey,
+                apiKeyOrigin = change.apiKeyOrigin
+            )
+        }
+        change.message?.let { message ->
+            _uiState.update { it.copy(apiTestMessage = message) }
+        }
+    }
+
+    fun onApiKeyChange(value: String) {
+        val current = _uiState.value.apiConfig
+        updateApi {
+            it.copy(
+                apiKey = value.trim(),
+                apiKeyOrigin = CredentialBinding.bindOrigin(current.baseUrl, value, "")
+            )
+        }
+    }
+
     fun onApiModelChange(value: String) { updateApi { it.copy(model = value) } }
 
     fun refreshAvailableModels() {
@@ -221,9 +257,14 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun testApiEndpoint() {
+        val config = _uiState.value.apiConfig
+        if (!isValidEndpointUrl(config.baseUrl)) {
+            _uiState.update { it.copy(apiTestMessage = HTTPS_ENDPOINT_REQUIRED_MESSAGE) }
+            return
+        }
         viewModelScope.launch {
             _uiState.update { it.copy(apiTestMessage = "Testing endpoint...") }
-            val res = runCatching { apiService.testEndpoint(_uiState.value.apiConfig) }
+            val res = runCatching { apiService.testEndpoint(config) }
             _uiState.update { it.copy(apiTestMessage = res.getOrElse { "Test failed: ${it.message}" }) }
         }
     }
@@ -322,7 +363,13 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         memoryPersistJob = viewModelScope.launch(Dispatchers.IO) {
             memoryPersistMutex.withLock {
                 val snapshot = _uiState.value
-                memoryStore.save(com.friday.assistant.data.MemorySnapshot(snapshot.personaConfig, snapshot.memories))
+                memoryStore.save(
+                    MemorySnapshot(
+                        persona = snapshot.personaConfig,
+                        memories = snapshot.memories.filter { it.approved },
+                        pending = snapshot.pendingMemories
+                    )
+                )
             }
         }
     }
@@ -351,16 +398,59 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         val text = content.trim()
         if (text.isBlank()) return
         _uiState.update { state ->
-            state.copy(memories = state.memories.map { if (it.id == id) it.copy(content = text.take(1000), updatedAt = System.currentTimeMillis()) else it })
+            state.copy(
+                memories = state.memories.map {
+                    if (it.id == id) it.copy(content = text.take(1000), updatedAt = System.currentTimeMillis()) else it
+                },
+                pendingMemories = state.pendingMemories.map {
+                    if (it.id == id) it.copy(content = text.take(1000), updatedAt = System.currentTimeMillis()) else it
+                }
+            )
         }
         persistMemory()
     }
     fun deleteMemory(id: String) {
-        _uiState.update { state -> state.copy(memories = state.memories.filterNot { it.id == id }) }
+        _uiState.update { state ->
+            state.copy(
+                memories = state.memories.filterNot { it.id == id },
+                pendingMemories = state.pendingMemories.filterNot { it.id == id }
+            )
+        }
         persistMemory()
     }
     fun clearMemories() {
-        _uiState.update { it.copy(memories = emptyList()) }
+        _uiState.update { it.copy(memories = emptyList(), pendingMemories = emptyList()) }
+        persistMemory()
+    }
+    fun approveMemory(id: String) {
+        val pending = _uiState.value.pendingMemories.firstOrNull { it.id == id } ?: return
+        _uiState.update { state ->
+            state.copy(
+                memories = listOf(pending.copy(approved = true)) + state.memories,
+                pendingMemories = state.pendingMemories.filterNot { it.id == id }
+            )
+        }
+        persistMemory()
+    }
+    fun approveAllMemories() {
+        val pending = _uiState.value.pendingMemories
+        if (pending.isEmpty()) return
+        _uiState.update { state ->
+            state.copy(
+                memories = pending.map { it.copy(approved = true) } + state.memories,
+                pendingMemories = emptyList()
+            )
+        }
+        persistMemory()
+    }
+    fun discardMemory(id: String) {
+        _uiState.update { state ->
+            state.copy(pendingMemories = state.pendingMemories.filterNot { it.id == id })
+        }
+        persistMemory()
+    }
+    fun clearPendingMemories() {
+        _uiState.update { it.copy(pendingMemories = emptyList()) }
         persistMemory()
     }
 
@@ -387,6 +477,10 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         val localStatus = _uiState.value.modelStatus
         if (mode == InferenceMode.REMOTE_API && !apiConfig.isConfigured) {
             _uiState.update { it.copy(memoryBusyMessage = "Configure Remote API in Settings to extract memories.") }
+            return
+        }
+        if (mode == InferenceMode.REMOTE_API && !isValidEndpointUrl(apiConfig.baseUrl)) {
+            _uiState.update { it.copy(memoryBusyMessage = HTTPS_ENDPOINT_REQUIRED_MESSAGE) }
             return
         }
         if (mode == InferenceMode.LOCAL && !localStatus.isReady) {
@@ -417,15 +511,57 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 if (parsed.isEmpty()) {
                     _uiState.update { it.copy(isMemoryBusy = false, memoryBusyMessage = "No new memories extracted.") }
                 } else {
-                    val existing = _uiState.value.memories.map { it.content.trim().lowercase() }.toSet()
+                    val currentState = _uiState.value
+                    val existing = (currentState.memories + currentState.pendingMemories)
+                        .map { it.content.trim().lowercase() }
+                        .toSet()
                     val newItems = parsed.filterNot { existing.contains(it.trim().lowercase()) }
-                        .map { MemoryItem(content = it, source = "extracted") }
-                    _uiState.update { state ->
-                        state.copy(
-                            isMemoryBusy = false,
-                            memories = newItems + state.memories,
-                            memoryBusyMessage = if (newItems.isEmpty()) "No new memories added (duplicates)." else "Added ${newItems.size} memory item(s)."
-                        )
+                    if (mode == InferenceMode.REMOTE_API) {
+                        val remoteItems = newItems.map {
+                            MemoryItem(
+                                content = it,
+                                source = "extracted-remote",
+                                origin = EndpointSecurity.normalizeOrigin(apiConfig.baseUrl)?.canonical ?: "",
+                                model = apiConfig.model.trim(),
+                                approved = false
+                            )
+                        }
+                        _uiState.update { state ->
+                            state.copy(
+                                isMemoryBusy = false,
+                                pendingMemories = remoteItems + state.pendingMemories,
+                                memoryBusyMessage = if (remoteItems.isEmpty()) {
+                                    "No new memories added (duplicates)."
+                                } else {
+                                    "${remoteItems.size} item(s) staged for review. Approve them in Persona & Memory to let FRIDAY use them."
+                                }
+                            )
+                        }
+                    } else {
+                        val localModel = localStatus.resolvedPath
+                            ?.substringAfterLast('/')
+                            ?.substringAfterLast('\\')
+                            .orEmpty()
+                        val localItems = newItems.map {
+                            MemoryItem(
+                                content = it,
+                                source = "extracted",
+                                origin = "local",
+                                model = localModel,
+                                approved = true
+                            )
+                        }
+                        _uiState.update { state ->
+                            state.copy(
+                                isMemoryBusy = false,
+                                memories = localItems + state.memories,
+                                memoryBusyMessage = if (localItems.isEmpty()) {
+                                    "No new memories added (duplicates)."
+                                } else {
+                                    "Added ${localItems.size} memory item(s)."
+                                }
+                            )
+                        }
                     }
                     persistMemory()
                 }
@@ -725,13 +861,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         persistChats() // save user message/placeholder immediately
     }
 
-    private fun isValidEndpointUrl(url: String): Boolean {
-        val u = url.trim()
-        return (u.startsWith("http://") || u.startsWith("https://")) && u.length > 10
-    }
+    private fun isValidEndpointUrl(url: String): Boolean =
+        EndpointSecurity.isSecureEndpoint(url.trim())
 
     private fun activeMemories(): List<String> = _uiState.value.let { s ->
-        if (s.personaConfig.useMemories) s.memories.map { it.content } else emptyList()
+        if (s.personaConfig.useMemories) MemoryContext.approvedContents(s.memories) else emptyList()
     }
 
     private fun isActiveGeneration(id: Long): Boolean = activeGenerationId == id
@@ -763,7 +897,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                         if (!apiConfig.isConfigured) {
                             appendToAssistant(sessionId, assistantId, "Remote API mode is selected but no endpoint is configured. Open Settings and add an API base URL (and optional key/model).", done = true, error = true)
                         } else if (!isValidEndpointUrl(apiConfig.baseUrl)) {
-                            appendToAssistant(sessionId, assistantId, "Remote API endpoint URL looks invalid. Use a full http(s) URL (e.g. https://api.example.com/v1).", done = true, error = true)
+                            appendToAssistant(sessionId, assistantId, "Remote API endpoint URL is invalid or not secure. Use a full https:// URL (e.g. https://api.example.com/v1). Cleartext http:// is not allowed.", done = true, error = true)
                         } else {
                             val reply = apiService.generateReply(prompt, history, apiConfig, persona, memories)
                             val now = System.currentTimeMillis()

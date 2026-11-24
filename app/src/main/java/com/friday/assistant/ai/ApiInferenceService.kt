@@ -5,33 +5,45 @@ import android.util.Log
 import com.friday.assistant.data.ApiEndpointConfig
 import com.friday.assistant.data.ChatMessage
 import com.friday.assistant.data.ChatRole
+import com.friday.assistant.data.MemoryContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
-import java.io.BufferedReader
 import java.net.HttpURLConnection
 import java.net.URL
 
 class ApiInferenceService(private val appContext: Context) {
     private val prefs = appContext.getSharedPreferences("friday_api", Context.MODE_PRIVATE)
 
-    fun loadConfig(): ApiEndpointConfig = ApiEndpointConfig(
-        baseUrl = prefs.getString("base_url", "") ?: "",
-        apiKey = prefs.getString("api_key", "") ?: "",
-        model = prefs.getString("model", "") ?: ""
-    )
+    fun loadConfig(): ApiEndpointConfig {
+        val baseUrl = prefs.getString("base_url", "") ?: ""
+        val apiKey = prefs.getString("api_key", "") ?: ""
+        val model = prefs.getString("model", "") ?: ""
+        val storedOrigin = prefs.getString("api_key_origin", "") ?: ""
+        return ApiEndpointConfig(
+            baseUrl = baseUrl,
+            apiKey = apiKey,
+            model = model,
+            apiKeyOrigin = CredentialBinding.bindOrigin(baseUrl, apiKey, storedOrigin)
+        )
+    }
 
     fun saveConfig(config: ApiEndpointConfig) {
         prefs.edit()
             .putString("base_url", config.baseUrl.trim())
             .putString("api_key", config.apiKey.trim())
             .putString("model", config.model.trim())
+            .putString(
+                "api_key_origin",
+                CredentialBinding.bindOrigin(config.baseUrl, config.apiKey, config.apiKeyOrigin)
+            )
             .apply()
     }
 
     suspend fun testEndpoint(config: ApiEndpointConfig): String = withContext(Dispatchers.IO) {
         if (config.baseUrl.isBlank()) error("Endpoint URL is required")
+        EndpointSecurity.requireSecureEndpoint(config.baseUrl)
         val reply = generateReply("Reply with exactly: FRIDAY_OK", emptyList(), config, "You are FRIDAY, a helpful assistant.", emptyList())
         "Connected. Response: ${reply.take(120)}"
     }
@@ -44,11 +56,13 @@ class ApiInferenceService(private val appContext: Context) {
         memories: List<String> = emptyList()
     ): String = withContext(Dispatchers.IO) {
         val endpoint = resolveEndpoint(config.baseUrl)
+        RemoteRequestPolicy.validate(config, endpoint)
         Log.i("FRIDAY", "API: POST $endpoint model=${config.model.ifBlank { "(default)" }} history=${history.size}")
         val apiStart = System.currentTimeMillis()
         val url = URL(endpoint)
         val conn = (url.openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
+            setInstanceFollowRedirects(false)
             connectTimeout = 20000
             readTimeout = 120000
             doOutput = true
@@ -66,8 +80,9 @@ class ApiInferenceService(private val appContext: Context) {
             }
 
             val code = conn.responseCode
+            RemoteRequestPolicy.rejectRedirects(code, conn.getHeaderField("Location"))
             val stream = if (code in 200..299) conn.inputStream else (conn.errorStream ?: conn.inputStream)
-            val text = stream.bufferedReader().use(BufferedReader::readText)
+            val text = ResponseParser.readBounded(stream)
             if (code !in 200..299) {
                 Log.w("FRIDAY", "API: HTTP $code error=${extractError(text).take(200)}")
                 error("API $code: ${extractError(text)}")
@@ -143,11 +158,7 @@ class ApiInferenceService(private val appContext: Context) {
 
     private fun buildSystemText(systemPrompt: String, memories: List<String>): String = buildString {
         append(systemPrompt.trim().ifBlank { com.friday.assistant.data.PersonaConfig.DEFAULT_PERSONA_PROMPT })
-        val mem = memories.map { it.trim() }.filter { it.isNotBlank() }.take(20)
-        if (mem.isNotEmpty()) {
-            append("\n\nPersistent memories about the user/context (use when relevant, do not invent):\n")
-            mem.forEach { append("- ").append(it.take(300)).append('\n') }
-        }
+        append(MemoryContext.render(memories))
     }
 
     private fun buildMessagesJson(prompt: String, history: List<ChatMessage>, system: String): JSONArray {
@@ -170,96 +181,7 @@ class ApiInferenceService(private val appContext: Context) {
         append("User: ").append(prompt.trim()).append("\nAssistant:")
     }
 
-    private fun parseResponse(text: String): String {
-        val trimmed = text.trim()
-        if (trimmed.startsWith("{")) {
-            val json = JSONObject(trimmed)
-            // OpenAI-compatible: choices[0].message.content or choices[0].text
-            val choices = json.optJSONArray("choices")
-            if (choices != null && choices.length() > 0) {
-                val first = choices.optJSONObject(0)
-                val msg = first?.optJSONObject("message")
-                val content = extractText(msg?.opt("content")).ifBlank { extractText(first?.opt("text")) }
-                if (content.isNotBlank()) return content
-            }
-            // Ollama chat: { message: { content } } or generate: { response }
-            json.optJSONObject("message")?.let { m ->
-                val c = extractText(m.opt("content"))
-                if (c.isNotBlank()) return c
-            }
-            listOf("response", "output_text", "text", "result", "answer", "generated_text").forEach { key ->
-                val v = extractText(json.opt(key))
-                if (v.isNotBlank()) return v
-            }
-            // Anthropic-like: content [{type:text,text:...}]
-            val contentArr = json.optJSONArray("content")
-            if (contentArr != null) {
-                val c = extractText(contentArr)
-                if (c.isNotBlank()) return c
-            }
-            val outputArr = json.optJSONArray("output")
-            if (outputArr != null) {
-                val c = extractText(outputArr)
-                if (c.isNotBlank()) return c
-            }
-            json.optJSONObject("data")?.let { d ->
-                val c = extractText(d.opt("text")).ifBlank { extractText(d.opt("content")) }
-                if (c.isNotBlank()) return c
-            }
-            // Some APIs wrap in data array
-            json.optJSONArray("data")?.let { d ->
-                val c = extractText(d)
-                if (c.isNotBlank()) return c
-            }
-            return trimmed.take(1200)
-        }
-        // SSE or plain text fallback
-        if (trimmed.contains("data:")) {
-            val parts = trimmed.lineSequence()
-                .map { it.trim() }
-                .filter { it.startsWith("data:") }
-                .map { it.removePrefix("data:").trim() }
-                .filter { it.isNotBlank() && it != "[DONE]" }
-                .mapNotNull { part -> runCatching { parseResponse(part) }.getOrNull()?.takeIf { it.isNotBlank() } }
-                .toList()
-            if (parts.isNotEmpty()) {
-                val joined = parts.joinToString("")
-                // if chunks look cumulative (each starts with previous), prefer the last/full one
-                val cumulative = parts.size > 1 && parts.zipWithNext().all { (a, b) -> b.startsWith(a) }
-                return if (cumulative) parts.last() else joined
-            }
-        }
-        return trimmed.take(1200)
-    }
+    private fun parseResponse(text: String): String = ResponseParser.parse(text)
 
-    private fun extractText(value: Any?): String {
-        return when (value) {
-            null, JSONObject.NULL -> ""
-            is String -> value.trim()
-            is JSONArray -> {
-                (0 until value.length()).mapNotNull { i ->
-                    val v = value.opt(i)
-                    when (v) {
-                        is JSONObject -> extractText(v.opt("text")).ifBlank { extractText(v.opt("content")) }.ifBlank { extractText(v.opt("value")) }
-                        is String -> v.trim()
-                        else -> extractText(v)
-                    }.ifBlank { null }
-                }.joinToString("\n").trim()
-            }
-            is JSONObject -> extractText(value.opt("text")).ifBlank { extractText(value.opt("content")) }.ifBlank { extractText(value.opt("value")) }
-            else -> value.toString().trim().takeIf { it != "null" }.orEmpty()
-        }
-    }
-
-    private fun extractError(text: String): String {
-        return try {
-            val json = JSONObject(text.trim())
-            val msg = json.optJSONObject("error")?.optString("message")
-                ?: json.optString("error")
-                ?: json.optString("message")
-            msg?.takeIf { it.isNotBlank() && it != "null" } ?: text.take(300)
-        } catch (_: Exception) {
-            text.take(300)
-        }
-    }
+    private fun extractError(text: String): String = ResponseParser.extractError(text)
 }

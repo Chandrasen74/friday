@@ -406,6 +406,9 @@ fun FridayApp(viewModel: ChatViewModel) {
                     onUpdateMemory = viewModel::updateMemory,
                     onDeleteMemory = viewModel::deleteMemory,
                     onClearMemories = viewModel::clearMemories,
+                    onApproveMemory = viewModel::approveMemory,
+                    onDiscardMemory = viewModel::discardMemory,
+                    onApproveAllMemories = viewModel::approveAllMemories,
                     onExtractMemories = viewModel::extractMemoriesFromCurrentChat
                 )
             }
