@@ -1,3 +1,7 @@
+---
+feature: 01-Projects/friday/pieces/friday-v092-demo/renders/poster.png
+thumbnail: thumbnails/resized/c27e6aea4643f4e9baf95ee5a4518cec_86cf658e.webp
+---
 # FRIDAY v0.9.2 Demo Reel
 
 Deterministic, phone-first product film for FRIDAY (com.friday.assistant), rebuilt from the [FRIDAY_shotlist.md](FRIDAY_shotlist.md) spec. The reel uses only real app UI captures with camera motion and drawn overlays, no invented chrome.
