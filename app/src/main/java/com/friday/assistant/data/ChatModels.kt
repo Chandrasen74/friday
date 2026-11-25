@@ -13,7 +13,10 @@ data class MemoryItem(
     val content: String,
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis(),
-    val source: String = "manual" // manual | extracted
+    val source: String = "manual",        // manual | extracted | extracted-remote
+    val origin: String = "",               // canonical endpoint origin, or "local"
+    val model: String = "",                // model that produced the item
+    val approved: Boolean = true           // default true; remotely extracted items are created with false
 )
 
 data class PersonaConfig(
@@ -63,7 +66,8 @@ enum class InferenceMode {
 data class ApiEndpointConfig(
     val baseUrl: String = "",
     val apiKey: String = "",
-    val model: String = ""
+    val model: String = "",
+    val apiKeyOrigin: String = ""
 ) {
     val isConfigured: Boolean get() = baseUrl.isNotBlank()
 }

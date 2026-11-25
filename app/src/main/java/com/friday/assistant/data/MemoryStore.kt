@@ -4,15 +4,19 @@ import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import java.util.UUID
 
 data class MemorySnapshot(
     val persona: PersonaConfig = PersonaConfig(),
-    val memories: List<MemoryItem> = emptyList()
+    val memories: List<MemoryItem> = emptyList(),
+    val pending: List<MemoryItem> = emptyList()
 )
 
-class MemoryStore(context: Context) {
-    private val file = File(context.filesDir, "friday_memory.json")
+class MemoryStore(filesDir: File) {
+    private val file = File(filesDir, "friday_memory.json")
     private val lock = Any()
+
+    constructor(context: Context) : this(context.filesDir)
 
     fun load(): MemorySnapshot = synchronized(lock) {
         if (!file.exists()) return MemorySnapshot()
@@ -27,23 +31,12 @@ class MemoryStore(context: Context) {
                 )
             } else PersonaConfig()
 
-            val arr = obj.optJSONArray("memories") ?: JSONArray()
-            val memories = mutableListOf<MemoryItem>()
-            for (i in 0 until arr.length()) {
-                val m = arr.optJSONObject(i) ?: continue
-                val content = m.optString("content", "").trim()
-                if (content.isBlank()) continue
-                memories.add(
-                    MemoryItem(
-                        id = m.optString("id").ifBlank { java.util.UUID.randomUUID().toString() },
-                        content = content.take(1000),
-                        createdAt = m.optLong("createdAt", System.currentTimeMillis()),
-                        updatedAt = m.optLong("updatedAt", System.currentTimeMillis()),
-                        source = m.optString("source", "manual").ifBlank { "manual" }
-                    )
-                )
-            }
-            MemorySnapshot(persona = persona, memories = memories)
+            val loadedMemories = decodeMemories(obj.optJSONArray("memories"))
+            val loadedPending = decodeMemories(obj.optJSONArray("pendingMemories"))
+            val memories = loadedMemories.filter { it.approved }
+            val pending = loadedMemories.filterNot { it.approved } + loadedPending
+
+            MemorySnapshot(persona = persona, memories = memories, pending = pending)
         } catch (_: Exception) {
             MemorySnapshot()
         }
@@ -52,15 +45,12 @@ class MemoryStore(context: Context) {
     fun save(snapshot: MemorySnapshot): Boolean = synchronized(lock) {
         try {
             val arr = JSONArray()
-            snapshot.memories.forEach { m ->
-                arr.put(
-                    JSONObject()
-                        .put("id", m.id)
-                        .put("content", m.content)
-                        .put("createdAt", m.createdAt)
-                        .put("updatedAt", m.updatedAt)
-                        .put("source", m.source)
-                )
+            snapshot.memories.forEach { memory ->
+                arr.put(memoryJson(memory))
+            }
+            val pendingArr = JSONArray()
+            snapshot.pending.forEach { memory ->
+                pendingArr.put(memoryJson(memory))
             }
             val persona = JSONObject()
                 .put("systemPrompt", snapshot.persona.systemPrompt)
@@ -68,6 +58,7 @@ class MemoryStore(context: Context) {
             val root = JSONObject()
                 .put("persona", persona)
                 .put("memories", arr)
+                .put("pendingMemories", pendingArr)
 
             val tmp = File(file.parentFile ?: return false, "friday_memory.json.tmp")
             tmp.writeText(root.toString())
@@ -85,4 +76,48 @@ class MemoryStore(context: Context) {
     fun exportJson(): String = synchronized(lock) {
         runCatching { if (file.exists()) file.readText() else "{\"persona\":{},\"memories\":[]}" }.getOrDefault("")
     }
+
+    private fun decodeMemories(array: JSONArray?): List<MemoryItem> {
+        if (array == null) return emptyList()
+        val memories = mutableListOf<MemoryItem>()
+        for (i in 0 until array.length()) {
+            val obj = array.optJSONObject(i) ?: continue
+            val content = obj.optString("content", "").trim()
+            if (content.isBlank()) continue
+
+            val source = obj.optString("source", "manual").ifBlank { "manual" }
+            val storedApproved = if (obj.has("approved")) {
+                obj.optBoolean("approved", source == "manual")
+            } else {
+                source == "manual"
+            }
+            val origin = obj.optString("origin", "")
+            // Defense in depth: file authority remains an open platform question tracked by
+            // audit leads L-2, L-3 and L-6. This is not a cryptographic trust boundary.
+            val approved = storedApproved && (source == "manual" || origin.isNotBlank())
+            memories.add(
+                MemoryItem(
+                    id = obj.optString("id").ifBlank { UUID.randomUUID().toString() },
+                    content = content.take(1000),
+                    createdAt = obj.optLong("createdAt", System.currentTimeMillis()),
+                    updatedAt = obj.optLong("updatedAt", System.currentTimeMillis()),
+                    source = source,
+                    origin = origin,
+                    model = obj.optString("model", ""),
+                    approved = approved
+                )
+            )
+        }
+        return memories
+    }
+
+    private fun memoryJson(memory: MemoryItem): JSONObject = JSONObject()
+        .put("id", memory.id)
+        .put("content", memory.content)
+        .put("createdAt", memory.createdAt)
+        .put("updatedAt", memory.updatedAt)
+        .put("source", memory.source)
+        .put("origin", memory.origin)
+        .put("model", memory.model)
+        .put("approved", memory.approved)
 }

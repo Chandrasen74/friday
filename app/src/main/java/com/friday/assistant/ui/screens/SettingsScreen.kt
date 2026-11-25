@@ -129,6 +129,9 @@ internal fun SettingsScreen(
     onUpdateMemory: (String, String) -> Unit,
     onDeleteMemory: (String) -> Unit,
     onClearMemories: () -> Unit,
+    onApproveMemory: (String) -> Unit,
+    onDiscardMemory: (String) -> Unit,
+    onApproveAllMemories: () -> Unit,
     onExtractMemories: () -> Unit
 ) {
     val page = when {
@@ -216,6 +219,9 @@ internal fun SettingsScreen(
                     onUpdateMemory = onUpdateMemory,
                     onDeleteMemory = onDeleteMemory,
                     onClearMemories = onClearMemories,
+                    onApproveMemory = onApproveMemory,
+                    onDiscardMemory = onDiscardMemory,
+                    onApproveAllMemories = onApproveAllMemories,
                     onExtractMemories = onExtractMemories
                 )
                 SettingsPage.CHATS_STORAGE -> ChatsStorageScreen(
@@ -299,7 +305,7 @@ private fun SettingsMainPage(
                             )
                             Spacer(Modifier.height(6.dp))
                             Text(
-                                "Flexible endpoints: OpenAI-compatible (/v1/chat/completions), Ollama (/api/chat, /api/generate), or a full custom URL. Base hosts auto-resolve to /v1/chat/completions. API key/model optional depending on provider.",
+                                "Flexible endpoints: OpenAI-compatible (/v1/chat/completions), Ollama (/api/chat, /api/generate), or a full custom URL. Base hosts auto-resolve to /v1/chat/completions. API key/model optional depending on provider. The endpoint must use https://, and cleartext http:// is rejected because the API key and chat context are sent.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = TextSecondary
                             )
