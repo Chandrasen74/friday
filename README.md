@@ -29,7 +29,9 @@ The APK is large because it bundles Qwen3-0.6B and Granite 4.0 350M (int8 and fp
 
 F.R.I.D.A.Y is an on-device-first personal assistant for Android inspired by Tony Stark's AI. It supports local inference with LiteRT-LM (bundled Qwen3-0.6B model) and configurable remote API inference, with chat sessions stored locally on the device.
 
-![FRIDAY demo](pieces/friday-v092-demo/demo-preview.gif)
+<p align="center">
+  <img src="pieces/friday-v092-demo/demo-preview.gif" alt="FRIDAY demo" />
+</p>
 
 ## Screenshots
 
