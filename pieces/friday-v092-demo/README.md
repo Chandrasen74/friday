@@ -106,6 +106,13 @@ node "$env:ANIMATE_TOOLS/still.mjs" . 50.0 "renders/poster.png"
 
 `export.mjs` writes `renders/audio.wav` and stems from the in-piece score, encodes libx264 (crf 14, preset slow, yuv420p) + AAC, and muxes `renders/final.mp4`. Frame intermediates under `frames/` are regenerable and were removed after mux in the final pass.
 
+## Status
+
+Updated: 2026-11-25
+
+- **Deterministic reel:** `renders/final.mp4` (52.0s, 1080x1920, 30 fps) is the current final artifact for the v0.9.2 demo. Quality checks and accepted deviations are documented in [renders/qc_report.md](renders/qc_report.md) and [LOG.md](LOG.md).
+- **Flow alternate (in progress):** An experimental fully Flow-generated alternate is being tracked in [FLOW_STATUS.md](FLOW_STATUS.md). Current state: shots 1 and 2 saved, combined shot 3+4 needs retake and is blocked by Flow credits/quota, shots 5 through 11 not started.
+
 ## Notes
 
 - `renders/share.mp4` is from the superseded 2026-11-17 pass (stale). Regenerate on demand if a current share encode is needed.

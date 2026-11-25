@@ -17,7 +17,8 @@ thumbnail: thumbnails/resized/46fdf4e892e70890f0e4845eef4b4e7d_86cf658e.webp
 </p>
 
 **Repository:** https://github.com/Chandrasen74/friday  
-**Current version:** v0.9.0 (versionCode 36, `com.friday.assistant`, minSdk 26, target/compile SDK 35)
+**Current source version:** v0.9.2 (versionCode 38, `com.friday.assistant`, minSdk 26, target/compile SDK 35)  
+**Latest published release:** v0.9.0 (APK download below)
 
 ## Download
 
@@ -133,6 +134,14 @@ Primary test device: **Samsung Galaxy M15 (SM-M156B)**, Exynos 1330, Android 16 
 - Local `Qwen3-0.6B` (4-bit `.litertlm`) inference runs fully offline on CPU: streaming at roughly 2-3 tokens/s, with the first token taking longer on the initial prompt of a session (prefill is CPU-bound).
 - Remote API mode streams much faster and is recommended for longer or higher-quality conversations.
 - Verified on this device: local and remote streaming with the preloaded model, markdown rendering, live generation metrics (TTFT and tokens/sec in the status line), voice input, spoken replies with mute, diagnostics card, session management, persona and persistent memories, export/import, mode switching, model manager, portrait and landscape layouts, drawer navigation, and edge-to-edge/cutout behavior.
+
+## Status
+
+Updated: 2026-11-25
+
+- **Security remediation (landed on `main`):** F-1 through F-4 from the `friday-test-1-a1e22fc` audit are remediated in code (HTTPS-only endpoint policy, credential origin binding, bounded response parsing, and pending approval for remote-extracted memories). 44 JVM unit tests pass across 5 suites via `:app:testDebugUnitTest`.
+- **Device validation (in progress):** Samsung Galaxy M15 (SM-M156B, Android 16) pass started. L-7 per-message copy and L-8 full export copy showed the expected primary-clipboard sink with logcat evidence; L-10 TTS dispatch was observed partially (Google TTS path on device). L-1 through L-6, L-9, L-11, and L-12 through L-16 remain pending device/OEM evidence.
+- **Emulator smoke (AOSP API 34, x86_64):** Install/launch, first-launch model copy, L-7 clipboard round-trip, and L-12 markdown custom-scheme dispatch to a dummy handler were confirmed. Emulator results are not representative for Samsung One UI clipboard/TTS/recognizer/backup behavior.
 
 ## Notes
 
