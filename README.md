@@ -1,7 +1,3 @@
----
-feature: 01-Projects/friday/pieces/friday-v092-demo/demo-preview.gif
-thumbnail: thumbnails/resized/46fdf4e892e70890f0e4845eef4b4e7d_86cf658e.webp
----
 <p align="center">
   <img src="screenshots/friday-logo.png" alt="F.R.I.D.A.Y logo" width="160" />
 </p>
