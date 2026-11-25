@@ -14,7 +14,7 @@ Deterministic, phone-first product film for FRIDAY (com.friday.assistant), rebui
 ## Final Video
 
 <a href="renders/final.mp4">
-  <img src="demo-preview.gif" alt="Animated preview (click to play the full video)" width="360" />
+  <img src="demo-preview-portrait.gif" alt="Animated preview (click to play the full video)" width="360" />
 </a>
 
 - [Play / download final.mp4](renders/final.mp4) (click the preview above, or use this link; GitHub does not inline-play repo videos in README pages)
