@@ -14,7 +14,7 @@ Deterministic, phone-first product film for FRIDAY (com.friday.assistant), rebui
 ## Final Video
 
 <a href="renders/final.mp4">
-  <img src="demo-preview-portrait.gif" alt="Animated preview (click to play the full video)" width="360" />
+  <img src="renders/poster.png" alt="FRIDAY v0.9.2 final reel poster (click to play the full video)" width="360" />
 </a>
 
 - [Play / download final.mp4](renders/final.mp4) (click the preview above, or use this link; GitHub does not inline-play repo videos in README pages)
@@ -112,6 +112,7 @@ Updated: 2026-11-25
 
 - **Deterministic reel:** `renders/final.mp4` (52.0s, 1080x1920, 30 fps) is the current final artifact for the v0.9.2 demo. Quality checks and accepted deviations are documented in [renders/qc_report.md](renders/qc_report.md) and [LOG.md](LOG.md).
 - **Flow alternate (in progress):** An experimental fully Flow-generated alternate is being tracked in [FLOW_STATUS.md](FLOW_STATUS.md). Current state: shots 1 and 2 saved, combined shot 3+4 needs retake and is blocked by Flow credits/quota, shots 5 through 11 not started.
+- **Root README demo GIF:** `demo-preview-portrait.gif` is a 4s portrait GIF generated from Flow clip 1 (`shot01_instant.mp4`) after local watermark removal with LaMa ONNX (`Carve/LaMa-ONNX`) via `onnxruntime` CPU. The clean source clip is in gitignored scratch (`.audits/friday-test-1/scratch/watermark-work/shot01_clean.mp4`). This GIF is a short clip preview, not a preview of the 52s deterministic `renders/final.mp4`.
 
 ## Notes
 

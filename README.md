@@ -136,6 +136,7 @@ Updated: 2026-11-25
 - **Security remediation (landed on `main`):** F-1 through F-4 from the `friday-test-1-a1e22fc` audit are remediated in code (HTTPS-only endpoint policy, credential origin binding, bounded response parsing, and pending approval for remote-extracted memories). 44 JVM unit tests pass across 5 suites via `:app:testDebugUnitTest`.
 - **Device validation (in progress):** Samsung Galaxy M15 (SM-M156B, Android 16) pass started. L-7 per-message copy and L-8 full export copy showed the expected primary-clipboard sink with logcat evidence; L-10 TTS dispatch was observed partially (Google TTS path on device). L-1 through L-6, L-9, L-11, and L-12 through L-16 remain pending device/OEM evidence.
 - **Emulator smoke (AOSP API 34, x86_64):** Install/launch, first-launch model copy, L-7 clipboard round-trip, and L-12 markdown custom-scheme dispatch to a dummy handler were confirmed. Emulator results are not representative for Samsung One UI clipboard/TTS/recognizer/backup behavior.
+- **Demo GIF:** Root README demo GIF replaced with a 4s Flow clip 1 portrait GIF (`pieces/friday-v092-demo/demo-preview-portrait.gif`). Watermark removed locally with LaMa ONNX (`Carve/LaMa-ONNX`) via `onnxruntime` CPU. This is a short clip preview, not the 52s deterministic reel.
 
 ## Notes
 

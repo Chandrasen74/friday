@@ -13,7 +13,7 @@ Current adjustment: Shot 3 and Shot 4 are combined into one 8s clip (send + assi
 
 | Shot | Beat | Planned duration | Status | File / note |
 |---|---|---:|---|---|
-| 1 | Instant | 4s | Done (take saved) | `renders/shot01_instant.mp4` (2,134,862 bytes). Omni 1.2 Flash, 4s, 9:16. Gemini watermark present. |
+| 1 | Instant | 4s | Done (take saved, watermark cleaned locally) | `renders/shot01_instant.mp4` (2,134,862 bytes). Omni 1.2 Flash, 4s, 9:16. Gemini sparkle watermark removed locally with LaMa ONNX (`Carve/LaMa-ONNX`, `onnxruntime` CPU); clean clip in gitignored scratch `.audits/friday-test-1/scratch/watermark-work/shot01_clean.mp4`. `demo-preview-portrait.gif` in repo generated from the clean clip for the root README. |
 | 2 | Ready locally | 4s | Done (take saved) | `renders/shot02_ready_locally.mp4` (1,997,569 bytes). Last frame extracted for continuity: `reference-screenshots/shot02_lastframe.png`. |
 | 3+4 | One clean send + Alive while thinking (combined) | 8s | Blocked / needs retake | `renders/shot03_04_take1.mp4` (1,732,101 bytes). Veo 3.1 Lite take was bad: hand holding phone, gibberish UI, giant white FRIDAY bubble, large blue Send button, garbled reply, Veo watermark. Corrected prompt ready; Flow reports 24 credits needed. Recommended retake: Omni 1.2 Flash or Veo 3.1 Lite with corrected prompt and 3 references. |
 | 5 | Every run, measured | 4s | Not started | Prompt ready in `SHOT_PROMPTS.md`. |
@@ -49,4 +49,4 @@ Combined Shot 3+4 retake inputs:
 1. When credits are available, regenerate combined Shot 3+4 with the corrected prompt.
 2. If AI generation keeps inventing UI/text, use compositing fallback: clean phone/background video plus real Friday screenshots animated in editor.
 3. Continue with Shot 5 onward after 3+4 is acceptable.
-4. Add post captions, music, and final lockup text in editor; handle Gemini/Veo watermark per Flow plan/export terms.
+4. Add post captions, music, and final lockup text in editor. Shot 1 watermark has already been removed locally for the current README GIF; handle Gemini/Veo watermarks on future Flow shots per Flow plan/export terms.
